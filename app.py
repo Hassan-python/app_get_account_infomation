@@ -144,7 +144,11 @@ if not EASYOCR_AVAILABLE:
                         # 代替パスを試す
                         alt_cloud_paths = [
                             '/app/.apt/usr/share/tesseract-ocr/tesseract',
-                            '/app/packages/tesseract-ocr/tesseract'
+                            '/app/packages/tesseract-ocr/tesseract',
+                            '/app/.apt/usr/bin/tesseract-ocr',
+                            '/app/.apt/usr/share/tesseract-ocr/4.00/tesseract',
+                            '/app/.apt/usr/lib/tesseract-ocr/tesseract',
+                            '/app/.apt/usr/lib/x86_64-linux-gnu/tesseract-ocr/tesseract'
                         ]
                         
                         for alt_path in alt_cloud_paths:
@@ -156,20 +160,66 @@ if not EASYOCR_AVAILABLE:
                         # それでも見つからない場合はfindコマンドを使用
                         if not tesseract_path:
                             try:
-                                # findコマンドでtesseractバイナリを探す
-                                find_cmd = ['find', '/app', '-name', 'tesseract', '-type', 'f', '2>/dev/null']
-                                find_output = subprocess.check_output(find_cmd, stderr=subprocess.PIPE, text=True).strip()
+                                # findコマンドでtesseractバイナリを探す（エラー出力を抑制）
+                                find_cmd = ['find', '/app', '-name', 'tesseract', '-type', 'f']
+                                find_process = subprocess.Popen(find_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                find_output, find_error = find_process.communicate()
                                 
                                 if find_output:
-                                    tesseract_paths = find_output.split('\n')
-                                    st.info(f"findコマンドで見つかったTesseractパス: {tesseract_paths}")
-                                    
-                                    # 最初の結果を使用
+                                    tesseract_paths = [path for path in find_output.split('\n') if path.strip()]
                                     if tesseract_paths:
+                                        st.info(f"findコマンドで見つかったTesseractパス: {tesseract_paths}")
+                                        
+                                        # 最初の結果を使用
                                         tesseract_path = tesseract_paths[0]
                                         st.success(f"findコマンドでTesseractが見つかりました: {tesseract_path}")
+                                else:
+                                    st.warning("findコマンドでTesseractが見つかりませんでした。")
+                                    if find_error:
+                                        st.error(f"findコマンドのエラー: {find_error}")
                             except Exception as e:
                                 st.warning(f"findコマンドでの検索中にエラーが発生: {e}")
+                                
+                                # 別の方法でfindを試す
+                                try:
+                                    st.info("別の方法でfindコマンドを試行します...")
+                                    # シェルを使用してfindコマンドを実行
+                                    shell_cmd = "find /app -name tesseract -type f 2>/dev/null || true"
+                                    shell_output = subprocess.check_output(shell_cmd, shell=True, text=True).strip()
+                                    
+                                    if shell_output:
+                                        tesseract_paths = [path for path in shell_output.split('\n') if path.strip()]
+                                        if tesseract_paths:
+                                            st.info(f"シェルコマンドで見つかったTesseractパス: {tesseract_paths}")
+                                            tesseract_path = tesseract_paths[0]
+                                            st.success(f"シェルコマンドでTesseractが見つかりました: {tesseract_path}")
+                                except Exception as shell_err:
+                                    st.warning(f"シェルコマンドでの検索中にエラーが発生: {shell_err}")
+                            
+                            # Tesseractのインストール場所を確認するための追加情報
+                            if not tesseract_path:
+                                try:
+                                    st.info("Tesseractのインストール状況を確認しています...")
+                                    # dpkgコマンドでTesseractパッケージの情報を取得
+                                    dpkg_cmd = "dpkg -l | grep tesseract || true"
+                                    dpkg_output = subprocess.check_output(dpkg_cmd, shell=True, text=True).strip()
+                                    
+                                    if dpkg_output:
+                                        st.info(f"インストールされているTesseract関連パッケージ:\n{dpkg_output}")
+                                    else:
+                                        st.warning("Tesseract関連パッケージが見つかりません。")
+                                        
+                                    # which -aコマンドで全てのtesseractコマンドを探す
+                                    which_cmd = "which -a tesseract 2>/dev/null || true"
+                                    which_output = subprocess.check_output(which_cmd, shell=True, text=True).strip()
+                                    
+                                    if which_output:
+                                        st.info(f"which -aで見つかったTesseractパス:\n{which_output}")
+                                        # 最初のパスを使用
+                                        tesseract_path = which_output.split('\n')[0]
+                                        st.success(f"which -aでTesseractが見つかりました: {tesseract_path}")
+                                except Exception as info_err:
+                                    st.warning(f"Tesseract情報の取得中にエラーが発生: {info_err}")
                                 
                             # 最後の手段として、Tesseractをダミー実装で代替
                             if not tesseract_path:
