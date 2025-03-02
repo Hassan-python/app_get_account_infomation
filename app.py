@@ -1171,19 +1171,6 @@ def main():
                         else:
                             st.error(f"{file.name}からデータを抽出できませんでした。")
         
-        # 初期化メッセージを表示するセクション
-        with st.expander("システム情報", expanded=False):
-            st.subheader("システム初期化情報")
-            for msg_type, msg in initialization_messages:
-                if msg_type == "success":
-                    st.success(msg)
-                elif msg_type == "warning":
-                    st.warning(msg)
-                elif msg_type == "error":
-                    st.error(msg)
-                else:
-                    st.info(msg)
-    
     with tab2:
         st.header("クレジット履歴画像のアップロード")
         credit_files = st.file_uploader(
@@ -1268,19 +1255,6 @@ def main():
                             st.success(f"{file.name}から{len(entries)}件のデータを抽出しました。")
                         else:
                             st.error(f"{file.name}からデータを抽出できませんでした。")
-        
-        # 初期化メッセージを表示するセクション
-        with st.expander("システム情報", expanded=False):
-            st.subheader("システム初期化情報")
-            for msg_type, msg in initialization_messages:
-                if msg_type == "success":
-                    st.success(msg)
-                elif msg_type == "warning":
-                    st.warning(msg)
-                elif msg_type == "error":
-                    st.error(msg)
-                else:
-                    st.info(msg)
     
     with tab3:
         st.header("抽出されたデータ")
