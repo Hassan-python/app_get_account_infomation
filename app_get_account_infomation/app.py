@@ -1171,19 +1171,6 @@ def main():
                         else:
                             st.error(f"{file.name}からデータを抽出できませんでした。")
         
-        # 初期化メッセージを表示するセクション
-        with st.expander("システム情報", expanded=False):
-            st.subheader("システム初期化情報")
-            for msg_type, msg in initialization_messages:
-                if msg_type == "success":
-                    st.success(msg)
-                elif msg_type == "warning":
-                    st.warning(msg)
-                elif msg_type == "error":
-                    st.error(msg)
-                else:
-                    st.info(msg)
-    
     with tab2:
         st.header("クレジット履歴画像のアップロード")
         credit_files = st.file_uploader(
@@ -1268,19 +1255,6 @@ def main():
                             st.success(f"{file.name}から{len(entries)}件のデータを抽出しました。")
                         else:
                             st.error(f"{file.name}からデータを抽出できませんでした。")
-        
-        # 初期化メッセージを表示するセクション
-        with st.expander("システム情報", expanded=False):
-            st.subheader("システム初期化情報")
-            for msg_type, msg in initialization_messages:
-                if msg_type == "success":
-                    st.success(msg)
-                elif msg_type == "warning":
-                    st.warning(msg)
-                elif msg_type == "error":
-                    st.error(msg)
-                else:
-                    st.info(msg)
     
     with tab3:
         st.header("抽出されたデータ")
@@ -1492,12 +1466,24 @@ def main():
                     if 'image_id' in df.columns:
                         df = df.drop(columns=['image_id'])
                     
-                    # Excelファイルの作成
+                    # Excelファイルの作成（BytesIOを使用）
                     buffer = BytesIO()
-                    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                        df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                    try:
+                        # openpyxlエンジンを使用
+                        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                            df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                    except Exception as e:
+                        st.error(f"Excelファイル作成中にエラーが発生しました: {str(e)}")
+                        st.info("別のエンジンで試行します...")
+                        try:
+                            # xlsxwriterエンジンを使用
+                            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                                df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                        except Exception as e2:
+                            st.error(f"代替エンジンでも失敗しました: {str(e2)}")
+                            return
                     
-                    # ダウンロードボタン
+                    # ダウンロードボタン（MIMEタイプを正確に指定）
                     st.download_button(
                         label="Excelファイルをダウンロード",
                         data=buffer.getvalue(),
