@@ -1,0 +1,5 @@
+tesseract-ocr
+libtesseract-dev
+tesseract-ocr-jpn
+tesseract-ocr-eng
+libgl1 
