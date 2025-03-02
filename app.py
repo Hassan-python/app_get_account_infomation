@@ -1030,39 +1030,67 @@ def main():
     st.title("レシート・クレジット履歴分析アプリ")
     st.write("レシートやクレジットカード履歴の画像をアップロードして、情報を抽出し、Excelにまとめましょう。")
     
+    # Streamlit Cloud環境の検出
+    is_streamlit_cloud = os.path.exists('/app')
+    
     # Excelライブラリのインポート確認
+    excel_engines = {}
+    
     try:
         import openpyxl
-        OPENPYXL_AVAILABLE = True
+        excel_engines['openpyxl'] = {
+            'available': True,
+            'version': openpyxl.__version__,
+            'priority': 1  # 優先度: 1が最高
+        }
         debug_info(f"✅ openpyxlが正常にインポートされました。バージョン: {openpyxl.__version__}")
     except ImportError:
-        OPENPYXL_AVAILABLE = False
-        st.warning("⚠️ openpyxlをインポートできませんでした。Excel出力機能が制限される可能性があります。")
+        excel_engines['openpyxl'] = {
+            'available': False,
+            'version': None,
+            'priority': 1
+        }
+        debug_info("⚠️ openpyxlをインポートできませんでした")
+        if is_streamlit_cloud:
+            st.warning("⚠️ Streamlit Cloud環境でopenpyxlをインポートできませんでした。requirements.txtに「openpyxl>=3.1.2」が含まれていることを確認してください。")
+        else:
+            st.warning("⚠️ openpyxlをインポートできませんでした。Excel出力機能が制限される可能性があります。")
 
     try:
         import xlsxwriter
-        XLSXWRITER_AVAILABLE = True
+        excel_engines['xlsxwriter'] = {
+            'available': True,
+            'version': xlsxwriter.__version__,
+            'priority': 2
+        }
         debug_info(f"✅ xlsxwriterが正常にインポートされました。バージョン: {xlsxwriter.__version__}")
     except ImportError:
-        XLSXWRITER_AVAILABLE = False
-        st.warning("⚠️ xlsxwriterをインポートできませんでした。Excel出力機能が制限される可能性があります。")
+        excel_engines['xlsxwriter'] = {
+            'available': False,
+            'version': None,
+            'priority': 2
+        }
+        debug_info("⚠️ xlsxwriterをインポートできませんでした")
+        if is_streamlit_cloud:
+            st.warning("⚠️ Streamlit Cloud環境でxlsxwriterをインポートできませんでした。requirements.txtに「xlsxwriter>=3.1.0」が含まれていることを確認してください。")
+        else:
+            st.warning("⚠️ xlsxwriterをインポートできませんでした。Excel出力機能が制限される可能性があります。")
 
+    # 利用可能なExcelエンジンを優先度順にソート
+    available_engines = [engine for engine, info in excel_engines.items() if info['available']]
+    available_engines.sort(key=lambda x: excel_engines[x]['priority'])
+    
     # Excelエンジンの状態をまとめて表示
-    excel_status = []
-    if 'openpyxl' in sys.modules:
-        excel_status.append("openpyxl: ✓")
-    else:
-        excel_status.append("openpyxl: ✗")
-    
-    if 'xlsxwriter' in sys.modules:
-        excel_status.append("xlsxwriter: ✓")
-    else:
-        excel_status.append("xlsxwriter: ✗")
-    
-    if 'openpyxl' in sys.modules or 'xlsxwriter' in sys.modules:
-        st.success(f"✅ Excel出力機能が利用可能です。({' | '.join(excel_status)})")
+    if available_engines:
+        engine_status = [f"{engine}: ✓ (v{excel_engines[engine]['version']})" for engine in available_engines]
+        unavailable = [f"{engine}: ✗" for engine, info in excel_engines.items() if not info['available']]
+        all_status = engine_status + unavailable
+        st.success(f"✅ Excel出力機能が利用可能です。({' | '.join(all_status)})")
+        debug_info(f"利用可能なExcelエンジン: {', '.join(available_engines)}")
     else:
         st.error("❌ Excel出力機能が利用できません。requirements.txtにopenpyxlとxlsxwriterが含まれていることを確認してください。")
+        if is_streamlit_cloud:
+            st.info("Streamlit Cloud環境では、requirements.txtに以下の行が含まれていることを確認してください：\n```\nopenpyxl>=3.1.2\nxlsxwriter>=3.1.0\n```")
     
     # セッション状態の初期化
     if 'entries' not in st.session_state:
@@ -1504,35 +1532,25 @@ def main():
                     buffer = BytesIO()
                     excel_created = False
                     
-                    # インポート状態に基づいて最適なエンジンを選択
-                    if 'openpyxl' in sys.modules:
+                    # 利用可能なエンジンを優先度順に試す
+                    for engine in available_engines:
                         try:
-                            # openpyxlエンジンを使用
-                            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                            debug_info(f"{engine}エンジンでExcelファイル作成を試みます")
+                            with pd.ExcelWriter(buffer, engine=engine) as writer:
                                 df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
                             excel_created = True
-                            st.success("✅ openpyxlエンジンでExcelファイルを作成しました。")
-                            debug_info("openpyxlエンジンでExcelファイルを作成しました。")
+                            st.success(f"✅ {engine}エンジンでExcelファイルを作成しました。")
+                            debug_info(f"{engine}エンジンでExcelファイルを作成しました。")
+                            break  # 成功したらループを抜ける
                         except Exception as e:
-                            st.error(f"❌ openpyxlでのExcelファイル作成中にエラーが発生しました: {str(e)}")
-                            debug_info(f"openpyxlエラー: {str(e)}")
+                            st.error(f"❌ {engine}でのExcelファイル作成中にエラーが発生しました: {str(e)}")
+                            debug_info(f"{engine}エラー: {str(e)}")
+                            # 次のエンジンを試す
                     
-                    # openpyxlが失敗した場合はxlsxwriterを試す
-                    if not excel_created and 'xlsxwriter' in sys.modules:
-                        try:
-                            # xlsxwriterエンジンを使用
-                            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                                df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
-                            excel_created = True
-                            st.success("✅ xlsxwriterエンジンでExcelファイルを作成しました。")
-                            debug_info("xlsxwriterエンジンでExcelファイルを作成しました。")
-                        except Exception as e:
-                            st.error(f"❌ xlsxwriterでのExcelファイル作成中にエラーが発生しました: {str(e)}")
-                            debug_info(f"xlsxwriterエラー: {str(e)}")
-                    
-                    # 両方が失敗した場合はデフォルトエンジンを試す
+                    # 全てのエンジンが失敗した場合はデフォルトエンジンを試す
                     if not excel_created:
                         try:
+                            debug_info("デフォルトエンジンでExcelファイル作成を試みます")
                             # デフォルトエンジンを使用
                             df.to_excel(buffer, index=False)
                             excel_created = True
@@ -1541,7 +1559,24 @@ def main():
                         except Exception as e:
                             st.error(f"❌ Excelファイルの作成に失敗しました: {str(e)}")
                             debug_info(f"デフォルトエンジンエラー: {str(e)}")
-                            return
+                            
+                            # CSVファイルとしての出力を試みる
+                            try:
+                                debug_info("CSVファイルとしての出力を試みます")
+                                csv_buffer = BytesIO()
+                                df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+                                st.success("✅ CSVファイルを作成しました（Excelの代わりに）。")
+                                st.download_button(
+                                    label="CSVファイルをダウンロード",
+                                    data=csv_buffer.getvalue(),
+                                    file_name="receipt_credit_data.csv",
+                                    mime="text/csv"
+                                )
+                                return
+                            except Exception as csv_e:
+                                st.error(f"❌ CSVファイルの作成にも失敗しました: {str(csv_e)}")
+                                debug_info(f"CSVエラー: {str(csv_e)}")
+                                return
                     
                     # ダウンロードボタン（MIMEタイプを正確に指定）
                     if excel_created:
