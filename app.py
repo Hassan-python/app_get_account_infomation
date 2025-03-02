@@ -45,21 +45,33 @@ try:
             st.error("Tesseractが見つかりません。インストールしてください。")
             st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
     elif platform.system() == 'Linux':
-        pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-        
-        # Tesseractのバージョンを確認（Linux）
+        # Linuxの場合（Streamlit Cloudを含む）
         try:
-            version_output = subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
-            st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+            # まずパスを設定
+            pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
             
-            # インストールされている言語パックを確認
-            lang_output = subprocess.check_output(['tesseract', '--list-langs'], stderr=subprocess.STDOUT, text=True)
-            st.info(f"インストールされている言語パック: {lang_output}")
-        except Exception as ver_err:
-            st.warning(f"Tesseract情報の確認に失敗しました: {ver_err}")
+            # Tesseractのバージョンを確認（Linux）
+            try:
+                version_output = subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
+                st.success(f"Tesseractが見つかりました: /usr/bin/tesseract")
+                st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+                
+                # インストールされている言語パックを確認
+                try:
+                    lang_output = subprocess.check_output(['tesseract', '--list-langs'], stderr=subprocess.STDOUT, text=True)
+                    st.info(f"インストールされている言語パック: {lang_output}")
+                except Exception as lang_err:
+                    st.warning(f"言語パックの確認に失敗しました: {lang_err}")
+            except Exception as ver_err:
+                st.warning(f"Tesseract情報の確認に失敗しました: {ver_err}")
+                st.info("Streamlit Cloud環境では、packages.txtファイルにtesseract-ocrとtesseract-ocr-jpnが含まれていることを確認してください。")
+        except Exception as e:
+            st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
+            st.info("OCR機能が制限されます。テキスト抽出が正確に行われない可能性があります。")
     # macOSではデフォルトのパスを使用
 except Exception as e:
     st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
+    st.warning("OCR機能が制限されます。テキスト抽出が正確に行われない可能性があります。")
 
 import datetime
 import numpy as np
@@ -424,6 +436,25 @@ def process_image_with_ocr(image_bytes, params=None, is_credit=False):
         
         # OCR処理を実行
         try:
+            # Tesseractが利用可能かチェック
+            try:
+                if platform.system() == 'Windows':
+                    if not pytesseract.pytesseract.tesseract_cmd or not os.path.exists(pytesseract.pytesseract.tesseract_cmd):
+                        st.error("Tesseractが見つかりません。OCR処理をスキップします。")
+                        st.info("Windowsの場合は、Tesseractをインストールしてください: https://github.com/UB-Mannheim/tesseract/wiki")
+                        return "OCR処理ができませんでした。Tesseractがインストールされていません。"
+                else:
+                    # Linuxの場合、コマンドが実行可能かチェック
+                    try:
+                        subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
+                    except:
+                        st.error("Tesseractコマンドが実行できません。OCR処理をスキップします。")
+                        st.info("Streamlit Cloud環境では、packages.txtファイルにtesseract-ocrとtesseract-ocr-jpnが含まれていることを確認してください。")
+                        return "OCR処理ができませんでした。Tesseractが利用できません。"
+            except Exception as check_err:
+                st.warning(f"Tesseract利用可能性チェック中にエラーが発生しました: {check_err}")
+                
+            # OCR実行
             text = pytesseract.image_to_string(processed_image, config=custom_config)
             
             # テキストが空の場合は別のPSM値で再試行
