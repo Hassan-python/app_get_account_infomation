@@ -1468,28 +1468,59 @@ def main():
                     
                     # Excelファイルの作成（BytesIOを使用）
                     buffer = BytesIO()
+                    excel_created = False
+                    
+                    # 1. openpyxlを試す
                     try:
                         # openpyxlエンジンを使用
                         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                             df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
-                    except Exception as e:
-                        st.error(f"Excelファイル作成中にエラーが発生しました: {str(e)}")
+                        excel_created = True
+                        st.success("openpyxlエンジンでExcelファイルを作成しました。")
+                    except ImportError as e:
+                        st.warning(f"openpyxlライブラリが見つかりません: {str(e)}")
                         st.info("別のエンジンで試行します...")
+                    except Exception as e:
+                        st.error(f"openpyxlでのExcelファイル作成中にエラーが発生しました: {str(e)}")
+                        st.info("別のエンジンで試行します...")
+                    
+                    # 2. xlsxwriterを試す（openpyxlが失敗した場合）
+                    if not excel_created:
                         try:
                             # xlsxwriterエンジンを使用
                             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                                 df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                            excel_created = True
+                            st.success("xlsxwriterエンジンでExcelファイルを作成しました。")
+                        except ImportError as e:
+                            st.warning(f"xlsxwriterライブラリが見つかりません: {str(e)}")
+                            st.error("Excelファイルを作成できません。requirements.txtにopenpyxlとxlsxwriterが含まれていることを確認してください。")
+                            return
                         except Exception as e2:
-                            st.error(f"代替エンジンでも失敗しました: {str(e2)}")
+                            st.error(f"xlsxwriterでのExcelファイル作成中にエラーが発生しました: {str(e2)}")
+                            return
+                    
+                    # 3. デフォルトエンジンを試す（両方が失敗した場合）
+                    if not excel_created:
+                        try:
+                            # デフォルトエンジンを使用
+                            df.to_excel(buffer, index=False, sheet_name="レシート・クレジット履歴")
+                            excel_created = True
+                            st.success("デフォルトエンジンでExcelファイルを作成しました。")
+                        except Exception as e3:
+                            st.error(f"デフォルトエンジンでのExcelファイル作成中にエラーが発生しました: {str(e3)}")
                             return
                     
                     # ダウンロードボタン（MIMEタイプを正確に指定）
-                    st.download_button(
-                        label="Excelファイルをダウンロード",
-                        data=buffer.getvalue(),
-                        file_name="receipt_credit_data.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    if excel_created:
+                        st.download_button(
+                            label="Excelファイルをダウンロード",
+                            data=buffer.getvalue(),
+                            file_name="receipt_credit_data.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    else:
+                        st.error("Excelファイルの作成に失敗しました。")
             
             # データのクリアボタン
             if st.button("データをクリア"):
