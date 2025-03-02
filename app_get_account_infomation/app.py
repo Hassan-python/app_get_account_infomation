@@ -9,6 +9,7 @@ from PIL import Image
 import pytesseract
 import platform
 import sys
+import subprocess
 
 # Tesseractのパス設定とエラーハンドリング
 try:
@@ -30,11 +31,29 @@ try:
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
             st.success(f"Tesseractが見つかりました: {tesseract_path}")
+            
+            # Tesseractのバージョンを確認（Windows）
+            try:
+                version_output = subprocess.check_output([tesseract_path, '--version'], stderr=subprocess.STDOUT, text=True)
+                st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+            except Exception as ver_err:
+                st.warning(f"Tesseractバージョンの確認に失敗しました: {ver_err}")
         else:
             st.error("Tesseractが見つかりません。インストールしてください。")
             st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
     elif platform.system() == 'Linux':
         pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+        
+        # Tesseractのバージョンを確認（Linux）
+        try:
+            version_output = subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
+            st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+            
+            # インストールされている言語パックを確認
+            lang_output = subprocess.check_output(['tesseract', '--list-langs'], stderr=subprocess.STDOUT, text=True)
+            st.info(f"インストールされている言語パック: {lang_output}")
+        except Exception as ver_err:
+            st.warning(f"Tesseract情報の確認に失敗しました: {ver_err}")
     # macOSではデフォルトのパスを使用
 except Exception as e:
     st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
