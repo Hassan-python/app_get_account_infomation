@@ -18,7 +18,52 @@ elif platform.system() == 'Linux':
 
 import datetime
 import numpy as np
-import cv2
+
+# cv2のインポートを試みる
+try:
+    import cv2
+except ImportError:
+    # cv2モジュールが見つからない場合、ダミーのcv2モジュールを作成
+    class DummyCV2:
+        def __init__(self):
+            self.COLOR_BGR2GRAY = 6
+            self.THRESH_BINARY = 0
+            self.THRESH_BINARY_INV = 1
+            self.RETR_EXTERNAL = 0
+            self.CHAIN_APPROX_SIMPLE = 1
+            
+        def cvtColor(self, img, code):
+            # グレースケール変換のダミー実装
+            if code == self.COLOR_BGR2GRAY and len(img.shape) == 3:
+                return np.mean(img, axis=2).astype(np.uint8)
+            return img
+            
+        def threshold(self, img, thresh, maxval, type):
+            # 二値化のダミー実装
+            if type == self.THRESH_BINARY:
+                return 1, (img > thresh) * maxval
+            elif type == self.THRESH_BINARY_INV:
+                return 1, (img <= thresh) * maxval
+            return 1, img
+            
+        def findContours(self, img, mode, method):
+            # 輪郭検出のダミー実装
+            return [], None
+            
+        def GaussianBlur(self, img, ksize, sigmaX):
+            # ぼかしのダミー実装
+            return img
+            
+        def resize(self, img, dsize, fx=None, fy=None, interpolation=None):
+            # リサイズのダミー実装
+            if dsize is not None:
+                h, w = dsize
+                return np.zeros((h, w) if len(img.shape) == 2 else (h, w, img.shape[2]), dtype=img.dtype)
+            return img
+    
+    # ダミーのcv2モジュールをグローバル名前空間に追加
+    cv2 = DummyCV2()
+    st.warning("OpenCV (cv2) モジュールが見つかりませんでした。一部の画像処理機能が制限されます。")
 
 # HEIC形式のサポートを追加
 try:
