@@ -1030,6 +1030,40 @@ def main():
     st.title("レシート・クレジット履歴分析アプリ")
     st.write("レシートやクレジットカード履歴の画像をアップロードして、情報を抽出し、Excelにまとめましょう。")
     
+    # Excelライブラリのインポート確認
+    try:
+        import openpyxl
+        OPENPYXL_AVAILABLE = True
+        debug_info(f"✅ openpyxlが正常にインポートされました。バージョン: {openpyxl.__version__}")
+    except ImportError:
+        OPENPYXL_AVAILABLE = False
+        st.warning("⚠️ openpyxlをインポートできませんでした。Excel出力機能が制限される可能性があります。")
+
+    try:
+        import xlsxwriter
+        XLSXWRITER_AVAILABLE = True
+        debug_info(f"✅ xlsxwriterが正常にインポートされました。バージョン: {xlsxwriter.__version__}")
+    except ImportError:
+        XLSXWRITER_AVAILABLE = False
+        st.warning("⚠️ xlsxwriterをインポートできませんでした。Excel出力機能が制限される可能性があります。")
+
+    # Excelエンジンの状態をまとめて表示
+    excel_status = []
+    if 'openpyxl' in sys.modules:
+        excel_status.append("openpyxl: ✓")
+    else:
+        excel_status.append("openpyxl: ✗")
+    
+    if 'xlsxwriter' in sys.modules:
+        excel_status.append("xlsxwriter: ✓")
+    else:
+        excel_status.append("xlsxwriter: ✗")
+    
+    if 'openpyxl' in sys.modules or 'xlsxwriter' in sys.modules:
+        st.success(f"✅ Excel出力機能が利用可能です。({' | '.join(excel_status)})")
+    else:
+        st.error("❌ Excel出力機能が利用できません。requirements.txtにopenpyxlとxlsxwriterが含まれていることを確認してください。")
+    
     # セッション状態の初期化
     if 'entries' not in st.session_state:
         st.session_state.entries = []
@@ -1470,45 +1504,43 @@ def main():
                     buffer = BytesIO()
                     excel_created = False
                     
-                    # 1. openpyxlを試す
-                    try:
-                        # openpyxlエンジンを使用
-                        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                            df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
-                        excel_created = True
-                        st.success("openpyxlエンジンでExcelファイルを作成しました。")
-                    except ImportError as e:
-                        st.warning(f"openpyxlライブラリが見つかりません: {str(e)}")
-                        st.info("別のエンジンで試行します...")
-                    except Exception as e:
-                        st.error(f"openpyxlでのExcelファイル作成中にエラーが発生しました: {str(e)}")
-                        st.info("別のエンジンで試行します...")
+                    # インポート状態に基づいて最適なエンジンを選択
+                    if 'openpyxl' in sys.modules:
+                        try:
+                            # openpyxlエンジンを使用
+                            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                                df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                            excel_created = True
+                            st.success("✅ openpyxlエンジンでExcelファイルを作成しました。")
+                            debug_info("openpyxlエンジンでExcelファイルを作成しました。")
+                        except Exception as e:
+                            st.error(f"❌ openpyxlでのExcelファイル作成中にエラーが発生しました: {str(e)}")
+                            debug_info(f"openpyxlエラー: {str(e)}")
                     
-                    # 2. xlsxwriterを試す（openpyxlが失敗した場合）
-                    if not excel_created:
+                    # openpyxlが失敗した場合はxlsxwriterを試す
+                    if not excel_created and 'xlsxwriter' in sys.modules:
                         try:
                             # xlsxwriterエンジンを使用
                             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                                 df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
                             excel_created = True
-                            st.success("xlsxwriterエンジンでExcelファイルを作成しました。")
-                        except ImportError as e:
-                            st.warning(f"xlsxwriterライブラリが見つかりません: {str(e)}")
-                            st.error("Excelファイルを作成できません。requirements.txtにopenpyxlとxlsxwriterが含まれていることを確認してください。")
-                            return
-                        except Exception as e2:
-                            st.error(f"xlsxwriterでのExcelファイル作成中にエラーが発生しました: {str(e2)}")
-                            return
+                            st.success("✅ xlsxwriterエンジンでExcelファイルを作成しました。")
+                            debug_info("xlsxwriterエンジンでExcelファイルを作成しました。")
+                        except Exception as e:
+                            st.error(f"❌ xlsxwriterでのExcelファイル作成中にエラーが発生しました: {str(e)}")
+                            debug_info(f"xlsxwriterエラー: {str(e)}")
                     
-                    # 3. デフォルトエンジンを試す（両方が失敗した場合）
+                    # 両方が失敗した場合はデフォルトエンジンを試す
                     if not excel_created:
                         try:
                             # デフォルトエンジンを使用
-                            df.to_excel(buffer, index=False, sheet_name="レシート・クレジット履歴")
+                            df.to_excel(buffer, index=False)
                             excel_created = True
-                            st.success("デフォルトエンジンでExcelファイルを作成しました。")
-                        except Exception as e3:
-                            st.error(f"デフォルトエンジンでのExcelファイル作成中にエラーが発生しました: {str(e3)}")
+                            st.success("✅ デフォルトエンジンでExcelファイルを作成しました。")
+                            debug_info("デフォルトエンジンでExcelファイルを作成しました。")
+                        except Exception as e:
+                            st.error(f"❌ Excelファイルの作成に失敗しました: {str(e)}")
+                            debug_info(f"デフォルトエンジンエラー: {str(e)}")
                             return
                     
                     # ダウンロードボタン（MIMEタイプを正確に指定）
