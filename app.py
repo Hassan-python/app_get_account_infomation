@@ -1466,22 +1466,24 @@ def main():
                     if 'image_id' in df.columns:
                         df = df.drop(columns=['image_id'])
                     
-                    # Excelファイルの作成
+                    # Excelファイルの作成（BytesIOを使用）
                     buffer = BytesIO()
                     try:
-                        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                        # openpyxlエンジンを使用
+                        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                             df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
                     except Exception as e:
                         st.error(f"Excelファイル作成中にエラーが発生しました: {str(e)}")
                         st.info("別のエンジンで試行します...")
                         try:
-                            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                            # xlsxwriterエンジンを使用
+                            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                                 df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
                         except Exception as e2:
                             st.error(f"代替エンジンでも失敗しました: {str(e2)}")
                             return
                     
-                    # ダウンロードボタン
+                    # ダウンロードボタン（MIMEタイプを正確に指定）
                     st.download_button(
                         label="Excelファイルをダウンロード",
                         data=buffer.getvalue(),
