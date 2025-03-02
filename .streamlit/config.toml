@@ -1,5 +1,6 @@
 [server]
 enableCORS = false
+enableXsrfProtection = false
 
 [browser]
 gatherUsageStats = false
@@ -12,5 +13,4 @@ textColor = "#262730"
 font = "sans serif"
 
 [runner]
-# Python 3.9を指定
-pythonVersion = "3.9" 
+pythonVersion = "3.12" 

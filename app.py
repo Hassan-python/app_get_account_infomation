@@ -1,5 +1,8 @@
 # ブランチ実験しています
 import streamlit as st
+# st.set_page_configはStreamlitの最初のコマンドとして実行する必要があります
+st.set_page_config(page_title="レシート・クレジット履歴分析", page_icon="📊", layout="wide")
+
 import requests
 import pandas as pd
 import json
@@ -8,37 +11,82 @@ from io import BytesIO
 from PIL import Image
 import pytesseract
 import platform
+import sys
+import subprocess
 
-# プラットフォームに応じてTesseractのパスを設定
-if platform.system() == 'Windows':
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-elif platform.system() == 'Linux':
-    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-# macOSではデフォルトのパスを使用
+# Tesseractのパス設定とエラーハンドリング
+try:
+    if platform.system() == 'Windows':
+        # Windowsの場合、一般的なインストールパスを試す
+        possible_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+            r'C:\Users\Hassan\AppData\Local\Tesseract-OCR\tesseract.exe'
+        ]
+        
+        # 存在するパスを探す
+        tesseract_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                tesseract_path = path
+                break
+        
+        if tesseract_path:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            st.success(f"Tesseractが見つかりました: {tesseract_path}")
+            
+            # Tesseractのバージョンを確認（Windows）
+            try:
+                version_output = subprocess.check_output([tesseract_path, '--version'], stderr=subprocess.STDOUT, text=True)
+                st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+            except Exception as ver_err:
+                st.warning(f"Tesseractバージョンの確認に失敗しました: {ver_err}")
+        else:
+            st.error("Tesseractが見つかりません。インストールしてください。")
+            st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
+    elif platform.system() == 'Linux':
+        pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+        
+        # Tesseractのバージョンを確認（Linux）
+        try:
+            version_output = subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
+            st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+            
+            # インストールされている言語パックを確認
+            lang_output = subprocess.check_output(['tesseract', '--list-langs'], stderr=subprocess.STDOUT, text=True)
+            st.info(f"インストールされている言語パック: {lang_output}")
+        except Exception as ver_err:
+            st.warning(f"Tesseract情報の確認に失敗しました: {ver_err}")
+    # macOSではデフォルトのパスを使用
+except Exception as e:
+    st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
 
 import datetime
 import numpy as np
 
-# cv2のインポートを試みる - より堅牢なエラーハンドリング
+# cv2のインポートを試みる - Python 3.12対応の堅牢なエラーハンドリング
 try:
     import cv2
-    st.success("OpenCV (cv2) モジュールが正常にインポートされました。")
+    st.success(f"OpenCV (cv2) モジュールが正常にインポートされました。バージョン: {cv2.__version__}")
     CV2_AVAILABLE = True
 except ImportError as e:
     st.error(f"OpenCV (cv2) モジュールのインポートに失敗しました: {e}")
     # 詳細なエラー情報を表示
+    st.error(f"Python バージョン: {sys.version}")
     st.error("インストールされているパッケージを確認します...")
+    
+    # インストールされているパッケージの情報を表示
     try:
         import pkg_resources
-        installed_packages = [d.project_name for d in pkg_resources.working_set]
-        opencv_packages = [p for p in installed_packages if 'opencv' in p.lower()]
+        installed_packages = [f"{pkg.key}=={pkg.version}" for pkg in pkg_resources.working_set]
+        opencv_packages = [pkg for pkg in installed_packages if "opencv" in pkg.lower()]
         if opencv_packages:
-            st.info(f"インストールされているOpenCVパッケージ: {', '.join(opencv_packages)}")
+            st.error(f"インストールされているOpenCVパッケージ: {', '.join(opencv_packages)}")
         else:
-            st.warning("OpenCV関連のパッケージが見つかりません。")
+            st.error("OpenCV関連のパッケージが見つかりません。")
     except Exception as pkg_err:
         st.error(f"パッケージ情報の取得に失敗しました: {pkg_err}")
-    
+        
     # ダミーのcv2モジュールを作成
     class DummyCV2:
         def __init__(self):
@@ -48,6 +96,7 @@ except ImportError as e:
             self.RETR_EXTERNAL = 0
             self.CHAIN_APPROX_SIMPLE = 1
             self.ADAPTIVE_THRESH_GAUSSIAN_C = 1
+            self.__version__ = "dummy"
             
         def cvtColor(self, img, code):
             # グレースケール変換のダミー実装
@@ -591,8 +640,6 @@ def validate_date(date_str):
         return False, f"日付の形式が正しくありません。YYYY-MM-DD形式で入力してください。エラー: {str(e)}"
 
 def main():
-    st.set_page_config(page_title="レシート・クレジット履歴分析", page_icon="📊", layout="wide")
-    
     st.title("レシート・クレジット履歴分析アプリ")
     st.write("レシートやクレジットカード履歴の画像をアップロードして、情報を抽出し、Excelにまとめましょう。")
     

@@ -3,8 +3,9 @@ libtesseract-dev
 tesseract-ocr-jpn
 tesseract-ocr-eng
 libgl1
-libgl1-mesa-glx
-libglib2.0-0
+freeglut3-dev
+libgtk2.0-dev
 libsm6
+libxext6
 libxrender1
-libxext6 
+libglib2.0-0 
