@@ -1,0 +1,44 @@
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 環境変数ファイル
+.env
+.env.*
+
+# 仮想環境
+venv/
+ENV/
+
+# IDE関連
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# ローカルインストールされたライブラリ
+app_get_account_infomation/xlsxwriter/
+app_get_account_infomation/XlsxWriter-3.1.0.dist-info/
+app_get_account_infomation/bin/ 
