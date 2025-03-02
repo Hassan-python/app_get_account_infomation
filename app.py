@@ -1055,10 +1055,10 @@ def main():
         }
         debug_info(f"⚠️ openpyxlをインポートできませんでした: {str(e)}")
         if is_streamlit_cloud:
-            st.warning("⚠️ Streamlit Cloud環境でopenpyxlをインポートできませんでした。requirements.txtに「openpyxl>=3.1.2」が含まれていることを確認してください。")
+            st.warning("⚠️ Streamlit Cloud環境でopenpyxlをインポートできませんでした。requirements.txtに「openpyxl==3.1.2」が含まれていることを確認してください。")
         else:
             st.warning(f"⚠️ openpyxlをインポートできませんでした: {str(e)}。Excel出力機能が制限される可能性があります。")
-            st.info("pip install openpyxlコマンドを実行してopenpyxlをインストールしてください。")
+            st.info("pip install openpyxl==3.1.2コマンドを実行してopenpyxlをインストールしてください。")
 
     # xlsxwriterのインポート試行
     try:
@@ -1078,10 +1078,10 @@ def main():
         }
         debug_info(f"⚠️ xlsxwriterをインポートできませんでした: {str(e)}")
         if is_streamlit_cloud:
-            st.warning("⚠️ Streamlit Cloud環境でxlsxwriterをインポートできませんでした。requirements.txtに「xlsxwriter>=3.1.0」が含まれていることを確認してください。")
+            st.warning("⚠️ Streamlit Cloud環境でxlsxwriterをインポートできませんでした。requirements.txtに「xlsxwriter==3.1.0」が含まれていることを確認してください。")
         else:
             st.warning(f"⚠️ xlsxwriterをインポートできませんでした: {str(e)}。Excel出力機能が制限される可能性があります。")
-            st.info("pip install xlsxwriterコマンドを実行してxlsxwriterをインストールしてください。")
+            st.info("pip install xlsxwriter==3.1.0コマンドを実行してxlsxwriterをインストールしてください。")
 
     # 利用可能なExcelエンジンを優先度順にソート
     available_engines = [engine for engine, info in excel_engines.items() if info['available']]
@@ -1100,9 +1100,9 @@ def main():
         error_messages = [f"{engine}: {info.get('error', 'インポートエラー')}" for engine, info in excel_engines.items()]
         st.error(f"❌ Excel出力機能が利用できません。エラー: {' | '.join(error_messages)}")
         if is_streamlit_cloud:
-            st.info("Streamlit Cloud環境では、requirements.txtに以下の行が含まれていることを確認してください：\n```\nopenpyxl>=3.1.2\nxlsxwriter>=3.1.0\n```")
+            st.info("Streamlit Cloud環境では、requirements.txtに以下の行が含まれていることを確認してください：\n```\nopenpyxl==3.1.2\nxlsxwriter==3.1.0\n```")
         else:
-            st.info("以下のコマンドを実行してExcelライブラリをインストールしてください：\n```\npip install openpyxl xlsxwriter\n```")
+            st.info("以下のコマンドを実行してExcelライブラリをインストールしてください：\n```\npip install openpyxl==3.1.2 xlsxwriter==3.1.0\n```")
     
     # セッション状態の初期化
     if 'entries' not in st.session_state:
@@ -1560,9 +1560,10 @@ def main():
                             # エラーの詳細情報を表示
                             if "No module named" in str(e):
                                 if is_streamlit_cloud:
-                                    st.info(f"Streamlit Cloud環境では、requirements.txtに{engine}が含まれていることを確認してください。")
+                                    st.info(f"Streamlit Cloud環境では、requirements.txtに{engine}==3.1.2が含まれていることを確認してください。")
+                                    st.info(f"requirements.txtファイルがリポジトリのルートディレクトリとアプリケーションディレクトリの両方に存在することを確認してください。")
                                 else:
-                                    st.info(f"pip install {engine}コマンドを実行して{engine}をインストールしてください。")
+                                    st.info(f"pip install {engine}==3.1.2コマンドを実行して{engine}をインストールしてください。")
                             # 次のエンジンを試す
                     
                     # 全てのエンジンが失敗した場合はデフォルトエンジンを試す
