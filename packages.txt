@@ -9,4 +9,8 @@ libsm6
 libxext6
 libxrender1
 libglib2.0-0
-poppler-utils 
+poppler-utils
+libleptonica-dev
+libicu-dev
+libpango1.0-dev
+libcairo2-dev 

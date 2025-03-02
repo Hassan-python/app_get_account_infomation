@@ -13,4 +13,10 @@ textColor = "#262730"
 font = "sans serif"
 
 [runner]
-pythonVersion = "3.12" 
+# pythonVersionは現在サポートされていないため、コメントアウト
+# pythonVersion = "3.12"
+
+[global]
+developmentMode = false
+# デバッグモードを有効にする
+# DEBUG_MODE = "1" 

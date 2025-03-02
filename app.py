@@ -13,22 +13,46 @@ import platform
 import sys
 import subprocess
 import shutil
+import logging
+
+# ロギングの設定
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# デバッグ情報を表示する関数
+def debug_info(message):
+    logger.info(message)
+    if os.environ.get('DEBUG_MODE') == '1':
+        st.info(f"[DEBUG] {message}")
+
+# 環境情報を収集
+debug_info(f"Platform: {platform.system()}")
+debug_info(f"Python version: {sys.version}")
+debug_info(f"Working directory: {os.getcwd()}")
+
+# Streamlit Cloud環境の検出
+is_streamlit_cloud = os.path.exists('/app')
+if is_streamlit_cloud:
+    st.info("🌩️ Streamlit Cloud環境で実行中です")
+    debug_info("Streamlit Cloud環境を検出しました")
+else:
+    debug_info(f"ローカル環境で実行中: {platform.system()}")
 
 # EasyOCRのインポートを試みる
 try:
     import easyocr
     EASYOCR_AVAILABLE = True
-    st.success("EasyOCRが正常にインポートされました。")
+    st.success("✅ EasyOCRが正常にインポートされました。")
     
     # EasyOCRのリーダーを初期化（日本語と英語をサポート）
     @st.cache_resource
     def get_ocr_reader():
         try:
             reader = easyocr.Reader(['ja', 'en'])
-            st.success("EasyOCRリーダーが初期化されました。")
+            st.success("✅ EasyOCRリーダーが初期化されました。")
             return reader
         except Exception as e:
-            st.error(f"EasyOCRリーダーの初期化に失敗しました: {e}")
+            st.error(f"❌ EasyOCRリーダーの初期化に失敗しました: {e}")
             return None
     
     # リーダーを取得
@@ -36,7 +60,7 @@ try:
     
 except ImportError:
     EASYOCR_AVAILABLE = False
-    st.warning("EasyOCRがインストールされていません。代わりにTesseractを使用します。")
+    st.warning("⚠️ EasyOCRがインストールされていません。代わりにTesseractを使用します。")
     ocr_reader = None
     
     # Tesseractのインポートを試みる
@@ -45,35 +69,56 @@ except ImportError:
         TESSERACT_AVAILABLE = True
     except ImportError:
         TESSERACT_AVAILABLE = False
-        st.error("pytesseractがインストールされていません。OCR機能は制限されます。")
+        st.error("❌ pytesseractがインストールされていません。OCR機能は制限されます。")
 
 # Tesseractのパス設定とエラーハンドリング（EasyOCRが利用できない場合のフォールバック）
 if not EASYOCR_AVAILABLE:
     try:
         # 環境変数からTesseractパスを取得（優先）
         tesseract_path = os.environ.get('TESSERACT_PATH')
-        if tesseract_path and os.path.exists(tesseract_path):
-            st.success(f"環境変数からTesseractパスを取得しました: {tesseract_path}")
+        if tesseract_path and os.path.exists(tesseract_path) and os.access(tesseract_path, os.X_OK):
+            st.success(f"✅ 環境変数からTesseractパスを取得しました: {tesseract_path}")
+            debug_info(f"環境変数から有効なTesseractパスを取得: {tesseract_path}")
         else:
+            if tesseract_path:
+                debug_info(f"環境変数のTesseractパスが無効です: {tesseract_path}")
             tesseract_path = None
             
-            # Streamlit Cloud環境の検出
-            is_streamlit_cloud = os.path.exists('/app')
+            # Streamlit Cloud環境の処理
             if is_streamlit_cloud:
-                st.info("Streamlit Cloud環境を検出しました。")
+                st.info("🔍 Streamlit Cloud環境でTesseractを検索しています...")
                 
-                # Streamlit Cloud環境では、まずパッケージが正しくインストールされているか確認
+                # システム情報を収集
+                try:
+                    debug_info("システム情報を収集中...")
+                    os_info = subprocess.check_output("cat /etc/os-release 2>/dev/null || true", shell=True, text=True).strip()
+                    debug_info(f"OS情報:\n{os_info}")
+                    
+                    # ディレクトリ構造を確認
+                    dir_structure = subprocess.check_output("ls -la /app 2>/dev/null || true", shell=True, text=True).strip()
+                    debug_info(f"/appディレクトリ構造:\n{dir_structure}")
+                    
+                    # .aptディレクトリの確認
+                    if os.path.exists('/app/.apt'):
+                        apt_structure = subprocess.check_output("ls -la /app/.apt 2>/dev/null || true", shell=True, text=True).strip()
+                        debug_info(f"/app/.aptディレクトリ構造:\n{apt_structure}")
+                except Exception as sys_err:
+                    debug_info(f"システム情報収集中にエラー: {sys_err}")
+                
+                # パッケージの確認
                 try:
                     # パッケージの確認
                     dpkg_cmd = "dpkg -l | grep -E 'tesseract|libtesseract' || true"
                     dpkg_output = subprocess.check_output(dpkg_cmd, shell=True, text=True).strip()
                     
                     if dpkg_output:
-                        st.info(f"インストールされているTesseract関連パッケージ:\n{dpkg_output}")
+                        st.info(f"📦 インストールされているTesseract関連パッケージ:\n{dpkg_output}")
+                        debug_info(f"Tesseract関連パッケージ:\n{dpkg_output}")
                     else:
-                        st.warning("Tesseract関連パッケージが見つかりません。packages.txtを確認してください。")
+                        st.warning("⚠️ Tesseract関連パッケージが見つかりません。packages.txtを確認してください。")
+                        debug_info("Tesseract関連パッケージが見つかりません")
                 except Exception as pkg_err:
-                    st.warning(f"パッケージ情報の取得中にエラーが発生: {pkg_err}")
+                    debug_info(f"パッケージ情報の取得中にエラー: {pkg_err}")
                 
                 # Streamlit Cloudでの一般的なパスを試す
                 cloud_paths = [
@@ -91,10 +136,14 @@ if not EASYOCR_AVAILABLE:
                 
                 # パスの存在を確認
                 for path in cloud_paths:
-                    if os.path.exists(path) and os.access(path, os.X_OK):
-                        tesseract_path = path
-                        st.success(f"Tesseractパスが見つかりました: {path}")
-                        break
+                    if os.path.exists(path):
+                        if os.access(path, os.X_OK):
+                            tesseract_path = path
+                            st.success(f"✅ Tesseractパスが見つかりました: {path}")
+                            debug_info(f"有効なTesseractパスを発見: {path}")
+                            break
+                        else:
+                            debug_info(f"Tesseractパスが存在しますが、実行権限がありません: {path}")
                 
                 # which コマンドでパスを探す
                 if not tesseract_path:
@@ -102,46 +151,101 @@ if not EASYOCR_AVAILABLE:
                         which_cmd = "which tesseract 2>/dev/null || true"
                         which_output = subprocess.check_output(which_cmd, shell=True, text=True).strip()
                         
-                        if which_output and os.path.exists(which_output):
-                            tesseract_path = which_output
-                            st.success(f"whichコマンドでTesseractが見つかりました: {tesseract_path}")
+                        if which_output:
+                            if os.path.exists(which_output) and os.access(which_output, os.X_OK):
+                                tesseract_path = which_output
+                                st.success(f"✅ whichコマンドでTesseractが見つかりました: {tesseract_path}")
+                                debug_info(f"whichコマンドで有効なTesseractパスを発見: {which_output}")
+                            else:
+                                debug_info(f"whichコマンドで見つかったパスが無効です: {which_output}")
                     except Exception as which_err:
-                        st.warning(f"whichコマンドでの検索中にエラーが発生: {which_err}")
+                        debug_info(f"whichコマンドでの検索中にエラー: {which_err}")
                 
                 # findコマンドで探す（最後の手段）
                 if not tesseract_path:
                     try:
-                        st.info("findコマンドでTesseractを検索しています...")
-                        find_cmd = "find /app -name 'tesseract' -type f -executable 2>/dev/null || true"
+                        st.info("🔍 findコマンドでTesseractを検索しています...")
+                        # /appディレクトリと/usrディレクトリを検索
+                        find_cmd = "find /app /usr -name 'tesseract' -type f -executable 2>/dev/null || true"
                         find_output = subprocess.check_output(find_cmd, shell=True, text=True).strip()
                         
                         if find_output:
                             paths = [p for p in find_output.split('\n') if p.strip()]
                             if paths:
                                 tesseract_path = paths[0]
-                                st.success(f"findコマンドでTesseractが見つかりました: {tesseract_path}")
+                                st.success(f"✅ findコマンドでTesseractが見つかりました: {tesseract_path}")
+                                debug_info(f"findコマンドで有効なTesseractパスを発見: {tesseract_path}")
+                        else:
+                            debug_info("findコマンドでTesseractが見つかりませんでした")
                     except Exception as find_err:
-                        st.warning(f"findコマンドでの検索中にエラーが発生: {find_err}")
+                        debug_info(f"findコマンドでの検索中にエラー: {find_err}")
                 
-                # Tesseractが見つからない場合、言語データの場所を確認
-                if not tesseract_path:
-                    try:
-                        st.info("Tesseract言語データを検索しています...")
-                        lang_cmd = "find /app -path '*/tessdata' -type d 2>/dev/null || true"
-                        lang_output = subprocess.check_output(lang_cmd, shell=True, text=True).strip()
-                        
-                        if lang_output:
-                            st.info(f"Tesseract言語データディレクトリ: {lang_output}")
+                # Tesseract言語データの場所を確認
+                try:
+                    st.info("🔍 Tesseract言語データを検索しています...")
+                    lang_cmd = "find /app /usr -path '*/tessdata' -type d 2>/dev/null || true"
+                    lang_output = subprocess.check_output(lang_cmd, shell=True, text=True).strip()
+                    
+                    if lang_output:
+                        lang_dirs = [p for p in lang_output.split('\n') if p.strip()]
+                        if lang_dirs:
+                            st.info(f"📁 Tesseract言語データディレクトリが見つかりました: {lang_dirs[0]}")
+                            debug_info(f"言語データディレクトリ: {lang_dirs}")
+                            
                             # 言語データの親ディレクトリにtesseractがあるか確認
-                            for lang_dir in lang_output.split('\n'):
+                            for lang_dir in lang_dirs:
+                                # 言語データディレクトリの内容を確認
+                                try:
+                                    lang_files = subprocess.check_output(f"ls -la {lang_dir} 2>/dev/null || true", shell=True, text=True).strip()
+                                    debug_info(f"言語データディレクトリの内容 ({lang_dir}):\n{lang_files}")
+                                    
+                                    # jpnとengの言語ファイルが存在するか確認
+                                    jpn_exists = os.path.exists(os.path.join(lang_dir, 'jpn.traineddata'))
+                                    eng_exists = os.path.exists(os.path.join(lang_dir, 'eng.traineddata'))
+                                    debug_info(f"言語ファイル: jpn={jpn_exists}, eng={eng_exists}")
+                                    
+                                    if not jpn_exists or not eng_exists:
+                                        st.warning(f"⚠️ 言語ファイルが不足しています: jpn={jpn_exists}, eng={eng_exists}")
+                                except Exception as ls_err:
+                                    debug_info(f"言語ディレクトリの内容確認中にエラー: {ls_err}")
+                                
+                                # 言語データの親ディレクトリからtesseractを探す
                                 parent_dir = os.path.dirname(lang_dir)
-                                possible_bin = os.path.join(parent_dir, 'tesseract')
-                                if os.path.exists(possible_bin) and os.access(possible_bin, os.X_OK):
-                                    tesseract_path = possible_bin
-                                    st.success(f"言語データから推測したTesseractパス: {tesseract_path}")
-                                    break
-                    except Exception as lang_err:
-                        st.warning(f"言語データの検索中にエラーが発生: {lang_err}")
+                                possible_paths = [
+                                    os.path.join(parent_dir, 'tesseract'),
+                                    os.path.join(parent_dir, 'bin', 'tesseract')
+                                ]
+                                
+                                for possible_bin in possible_paths:
+                                    if os.path.exists(possible_bin) and os.access(possible_bin, os.X_OK):
+                                        if not tesseract_path:  # まだパスが見つかっていない場合のみ設定
+                                            tesseract_path = possible_bin
+                                            st.success(f"✅ 言語データから推測したTesseractパス: {tesseract_path}")
+                                            debug_info(f"言語データから有効なTesseractパスを推測: {possible_bin}")
+                                            break
+                    else:
+                        debug_info("Tesseract言語データディレクトリが見つかりませんでした")
+                except Exception as lang_err:
+                    debug_info(f"言語データの検索中にエラー: {lang_err}")
+                
+                # 最後の手段: 環境変数TESSDATA_PREFIXを確認
+                if not tesseract_path and 'TESSDATA_PREFIX' in os.environ:
+                    tessdata_prefix = os.environ['TESSDATA_PREFIX']
+                    debug_info(f"TESSDATA_PREFIX環境変数が設定されています: {tessdata_prefix}")
+                    
+                    # TESSDATA_PREFIXの親ディレクトリにtesseractがあるか確認
+                    parent_dir = os.path.dirname(tessdata_prefix)
+                    possible_paths = [
+                        os.path.join(parent_dir, 'tesseract'),
+                        os.path.join(parent_dir, 'bin', 'tesseract')
+                    ]
+                    
+                    for possible_bin in possible_paths:
+                        if os.path.exists(possible_bin) and os.access(possible_bin, os.X_OK):
+                            tesseract_path = possible_bin
+                            st.success(f"✅ TESSDATA_PREFIXから推測したTesseractパス: {tesseract_path}")
+                            debug_info(f"TESSDATA_PREFIXから有効なTesseractパスを推測: {possible_bin}")
+                            break
             
             elif platform.system() == 'Windows':
                 # Windowsの場合、一般的なインストールパスを試す
@@ -155,6 +259,8 @@ if not EASYOCR_AVAILABLE:
                 for path in possible_paths:
                     if os.path.exists(path):
                         tesseract_path = path
+                        st.success(f"✅ Tesseractパスが見つかりました: {path}")
+                        debug_info(f"Windowsで有効なTesseractパスを発見: {path}")
                         break
             
             elif platform.system() == 'Linux':
@@ -169,7 +275,8 @@ if not EASYOCR_AVAILABLE:
                 for path in linux_paths:
                     if os.path.exists(path) and os.access(path, os.X_OK):
                         tesseract_path = path
-                        st.success(f"Tesseractパスが見つかりました: {path}")
+                        st.success(f"✅ Tesseractパスが見つかりました: {path}")
+                        debug_info(f"Linuxで有効なTesseractパスを発見: {path}")
                         break
                 
                 # shutil.whichを使用
@@ -177,49 +284,96 @@ if not EASYOCR_AVAILABLE:
                     try:
                         tesseract_path = shutil.which('tesseract')
                         if tesseract_path:
-                            st.success(f"shutil.whichでTesseractが見つかりました: {tesseract_path}")
+                            st.success(f"✅ shutil.whichでTesseractが見つかりました: {tesseract_path}")
+                            debug_info(f"shutil.whichで有効なTesseractパスを発見: {tesseract_path}")
                     except Exception as which_err:
-                        st.warning(f"shutil.whichでの検索中にエラーが発生: {which_err}")
+                        debug_info(f"shutil.whichでの検索中にエラー: {which_err}")
         
         # Tesseractパスが見つかった場合の処理
         if tesseract_path:
             # パスが実際に存在するか最終確認
-            if os.path.exists(tesseract_path):
+            if os.path.exists(tesseract_path) and os.access(tesseract_path, os.X_OK):
                 # グローバル変数に設定
                 pytesseract.pytesseract.tesseract_cmd = tesseract_path
-                st.success(f"Tesseractパスを設定しました: {tesseract_path}")
+                st.success(f"✅ Tesseractパスを設定しました: {tesseract_path}")
+                debug_info(f"Tesseractパスを設定: {tesseract_path}")
                 
                 # 環境変数にも設定（他のプロセスのため）
                 os.environ['TESSERACT_PATH'] = tesseract_path
                 
+                # TESSDATA_PREFIXが設定されていない場合は推測して設定
+                if 'TESSDATA_PREFIX' not in os.environ:
+                    # tesseract_pathからTESSDATA_PREFIXを推測
+                    tesseract_dir = os.path.dirname(tesseract_path)
+                    possible_tessdata_dirs = [
+                        os.path.join(tesseract_dir, 'tessdata'),
+                        os.path.join(os.path.dirname(tesseract_dir), 'share', 'tesseract-ocr', 'tessdata'),
+                        os.path.join(os.path.dirname(tesseract_dir), 'tessdata'),
+                        '/usr/share/tesseract-ocr/tessdata',
+                        '/app/.apt/usr/share/tesseract-ocr/tessdata'
+                    ]
+                    
+                    for tessdata_dir in possible_tessdata_dirs:
+                        if os.path.exists(tessdata_dir) and os.path.isdir(tessdata_dir):
+                            os.environ['TESSDATA_PREFIX'] = tessdata_dir
+                            debug_info(f"TESSDATA_PREFIX環境変数を設定: {tessdata_dir}")
+                            break
+                
                 # Tesseractのバージョンを確認
                 try:
                     version_output = subprocess.check_output([tesseract_path, '--version'], stderr=subprocess.STDOUT, text=True)
-                    st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+                    st.info(f"ℹ️ Tesseractバージョン情報: {version_output.splitlines()[0]}")
+                    debug_info(f"Tesseractバージョン情報: {version_output}")
                     
                     # インストールされている言語パックを確認
                     try:
                         lang_output = subprocess.check_output([tesseract_path, '--list-langs'], stderr=subprocess.STDOUT, text=True)
-                        st.info(f"利用可能な言語: {lang_output}")
+                        st.info(f"ℹ️ 利用可能な言語: {lang_output}")
+                        debug_info(f"利用可能な言語: {lang_output}")
                         
                         # 日本語と英語が利用可能か確認
                         if 'jpn' not in lang_output and 'eng' not in lang_output:
-                            st.warning("日本語または英語の言語パックが見つかりません。OCR精度が低下する可能性があります。")
+                            st.warning("⚠️ 日本語または英語の言語パックが見つかりません。OCR精度が低下する可能性があります。")
+                            debug_info("日本語または英語の言語パックが見つかりません")
                     except Exception as lang_err:
-                        st.warning(f"言語リストの取得に失敗しました: {lang_err}")
+                        st.warning(f"⚠️ 言語リストの取得に失敗しました: {lang_err}")
+                        debug_info(f"言語リストの取得に失敗: {lang_err}")
                 except Exception as ver_err:
-                    st.warning(f"Tesseractバージョンの確認に失敗しました: {ver_err}")
+                    st.warning(f"⚠️ Tesseractバージョンの確認に失敗しました: {ver_err}")
+                    debug_info(f"Tesseractバージョンの確認に失敗: {ver_err}")
             else:
-                st.error(f"見つかったTesseractパス {tesseract_path} は存在しません。")
+                st.error(f"❌ 見つかったTesseractパス {tesseract_path} は存在しないか、実行権限がありません。")
+                debug_info(f"無効なTesseractパス: {tesseract_path}")
                 tesseract_path = None
         
         # Tesseractが見つからない場合はダミー実装を使用
         if not tesseract_path:
-            st.error("Tesseractが見つかりません。OCR機能はダミー実装で代替します。")
+            st.error("❌ Tesseractが見つかりません。OCR機能はダミー実装で代替します。")
+            debug_info("Tesseractが見つからないため、ダミー実装を使用します")
+            
             if is_streamlit_cloud:
-                st.info("Streamlit Cloud環境では、packages.txtファイルに以下が含まれていることを確認してください：\ntesseract-ocr\nlibtesseract-dev\ntesseract-ocr-jpn\ntesseract-ocr-eng")
+                st.info("""
+                📋 Streamlit Cloud環境では、packages.txtファイルに以下が含まれていることを確認してください：
+                ```
+                tesseract-ocr
+                libtesseract-dev
+                tesseract-ocr-jpn
+                tesseract-ocr-eng
+                ```
+                """)
+                
+                # packages.txtの内容を確認
+                try:
+                    if os.path.exists('packages.txt'):
+                        with open('packages.txt', 'r') as f:
+                            packages_content = f.read()
+                        debug_info(f"packages.txtの内容:\n{packages_content}")
+                    else:
+                        debug_info("packages.txtファイルが見つかりません")
+                except Exception as pkg_err:
+                    debug_info(f"packages.txtの読み込み中にエラー: {pkg_err}")
             else:
-                st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
+                st.info("ℹ️ Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
             
             # ダミーのOCR機能を提供
             class DummyTesseract:
@@ -231,7 +385,8 @@ if not EASYOCR_AVAILABLE:
             pytesseract.image_to_string = DummyTesseract.image_to_string
             TESSERACT_AVAILABLE = False
     except Exception as e:
-        st.error(f"Tesseract設定中にエラーが発生しました: {e}")
+        st.error(f"❌ Tesseract設定中にエラーが発生しました: {e}")
+        debug_info(f"Tesseract設定中にエラー: {e}")
         
         # エラーが発生した場合はダミー実装を使用
         try:
@@ -244,7 +399,8 @@ if not EASYOCR_AVAILABLE:
             pytesseract.image_to_string = DummyTesseract.image_to_string
             TESSERACT_AVAILABLE = False
         except Exception:
-            st.error("ダミーTesseractの設定にも失敗しました。OCR機能は完全に無効化されます。")
+            st.error("❌ ダミーTesseractの設定にも失敗しました。OCR機能は完全に無効化されます。")
+            debug_info("ダミーTesseractの設定にも失敗")
             TESSERACT_AVAILABLE = False
 
 import datetime
