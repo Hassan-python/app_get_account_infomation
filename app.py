@@ -9,7 +9,7 @@ from PIL import Image
 import pytesseract
 import platform
 
-# OSに応じてTesseractのパスを設定
+# Windows環境のパス設定を条件付きで行う
 if platform.system() == 'Windows':
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 # Streamlit Cloudではパスを設定しない（デフォルトのパスを使用）
