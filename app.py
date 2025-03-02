@@ -1468,8 +1468,18 @@ def main():
                     
                     # Excelファイルの作成
                     buffer = BytesIO()
-                    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                        df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                    try:
+                        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                            df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                    except Exception as e:
+                        st.error(f"Excelファイル作成中にエラーが発生しました: {str(e)}")
+                        st.info("別のエンジンで試行します...")
+                        try:
+                            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                                df.to_excel(writer, index=False, sheet_name="レシート・クレジット履歴")
+                        except Exception as e2:
+                            st.error(f"代替エンジンでも失敗しました: {str(e2)}")
+                            return
                     
                     # ダウンロードボタン
                     st.download_button(
