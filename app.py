@@ -7,7 +7,13 @@ import os
 from io import BytesIO
 from PIL import Image
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+import platform
+
+# OSに応じてTesseractのパスを設定
+if platform.system() == 'Windows':
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Streamlit Cloudではパスを設定しない（デフォルトのパスを使用）
+
 import datetime
 import cv2
 import numpy as np
