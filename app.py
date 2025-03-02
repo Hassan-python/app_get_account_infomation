@@ -19,11 +19,27 @@ elif platform.system() == 'Linux':
 import datetime
 import numpy as np
 
-# cv2のインポートを試みる
+# cv2のインポートを試みる - より堅牢なエラーハンドリング
 try:
     import cv2
-except ImportError:
-    # cv2モジュールが見つからない場合、ダミーのcv2モジュールを作成
+    st.success("OpenCV (cv2) モジュールが正常にインポートされました。")
+    CV2_AVAILABLE = True
+except ImportError as e:
+    st.error(f"OpenCV (cv2) モジュールのインポートに失敗しました: {e}")
+    # 詳細なエラー情報を表示
+    st.error("インストールされているパッケージを確認します...")
+    try:
+        import pkg_resources
+        installed_packages = [d.project_name for d in pkg_resources.working_set]
+        opencv_packages = [p for p in installed_packages if 'opencv' in p.lower()]
+        if opencv_packages:
+            st.info(f"インストールされているOpenCVパッケージ: {', '.join(opencv_packages)}")
+        else:
+            st.warning("OpenCV関連のパッケージが見つかりません。")
+    except Exception as pkg_err:
+        st.error(f"パッケージ情報の取得に失敗しました: {pkg_err}")
+    
+    # ダミーのcv2モジュールを作成
     class DummyCV2:
         def __init__(self):
             self.COLOR_BGR2GRAY = 6
@@ -31,6 +47,7 @@ except ImportError:
             self.THRESH_BINARY_INV = 1
             self.RETR_EXTERNAL = 0
             self.CHAIN_APPROX_SIMPLE = 1
+            self.ADAPTIVE_THRESH_GAUSSIAN_C = 1
             
         def cvtColor(self, img, code):
             # グレースケール変換のダミー実装
@@ -60,9 +77,47 @@ except ImportError:
                 h, w = dsize
                 return np.zeros((h, w) if len(img.shape) == 2 else (h, w, img.shape[2]), dtype=img.dtype)
             return img
+            
+        def adaptiveThreshold(self, img, maxValue, adaptiveMethod, thresholdType, blockSize, C):
+            # 適応的二値化のダミー実装
+            return np.ones_like(img) * maxValue
+            
+        def dilate(self, img, kernel, iterations=1):
+            # 膨張処理のダミー実装
+            return img
+            
+        def Canny(self, img, threshold1, threshold2):
+            # エッジ検出のダミー実装
+            return np.zeros_like(img)
+            
+        def boundingRect(self, contour):
+            # 矩形取得のダミー実装
+            return 0, 0, 100, 100
+            
+        def contourArea(self, contour):
+            # 輪郭面積のダミー実装
+            return 0
+            
+        def createCLAHE(self, clipLimit=2.0, tileGridSize=(8, 8)):
+            # CLAHEのダミー実装
+            class DummyCLAHE:
+                def apply(self, img):
+                    return img
+            return DummyCLAHE()
+            
+        def imdecode(self, buf, flags):
+            # 画像デコードのダミー実装
+            try:
+                from PIL import Image
+                import numpy as np
+                img = Image.open(BytesIO(buf))
+                return np.array(img)
+            except:
+                return np.zeros((100, 100, 3), dtype=np.uint8)
     
     # ダミーのcv2モジュールをグローバル名前空間に追加
     cv2 = DummyCV2()
+    CV2_AVAILABLE = False
     st.warning("OpenCV (cv2) モジュールが見つかりませんでした。一部の画像処理機能が制限されます。")
 
 # HEIC形式のサポートを追加
