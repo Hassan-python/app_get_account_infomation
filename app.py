@@ -1032,10 +1032,12 @@ def main():
     
     # Streamlit Cloud環境の検出
     is_streamlit_cloud = os.path.exists('/app')
+    debug_info(f"Streamlit Cloud環境: {'はい' if is_streamlit_cloud else 'いいえ'}")
     
     # Excelライブラリのインポート確認
     excel_engines = {}
     
+    # openpyxlのインポート試行
     try:
         import openpyxl
         excel_engines['openpyxl'] = {
@@ -1044,18 +1046,21 @@ def main():
             'priority': 1  # 優先度: 1が最高
         }
         debug_info(f"✅ openpyxlが正常にインポートされました。バージョン: {openpyxl.__version__}")
-    except ImportError:
+    except ImportError as e:
         excel_engines['openpyxl'] = {
             'available': False,
             'version': None,
-            'priority': 1
+            'priority': 1,
+            'error': str(e)
         }
-        debug_info("⚠️ openpyxlをインポートできませんでした")
+        debug_info(f"⚠️ openpyxlをインポートできませんでした: {str(e)}")
         if is_streamlit_cloud:
             st.warning("⚠️ Streamlit Cloud環境でopenpyxlをインポートできませんでした。requirements.txtに「openpyxl>=3.1.2」が含まれていることを確認してください。")
         else:
-            st.warning("⚠️ openpyxlをインポートできませんでした。Excel出力機能が制限される可能性があります。")
+            st.warning(f"⚠️ openpyxlをインポートできませんでした: {str(e)}。Excel出力機能が制限される可能性があります。")
+            st.info("pip install openpyxlコマンドを実行してopenpyxlをインストールしてください。")
 
+    # xlsxwriterのインポート試行
     try:
         import xlsxwriter
         excel_engines['xlsxwriter'] = {
@@ -1064,17 +1069,19 @@ def main():
             'priority': 2
         }
         debug_info(f"✅ xlsxwriterが正常にインポートされました。バージョン: {xlsxwriter.__version__}")
-    except ImportError:
+    except ImportError as e:
         excel_engines['xlsxwriter'] = {
             'available': False,
             'version': None,
-            'priority': 2
+            'priority': 2,
+            'error': str(e)
         }
-        debug_info("⚠️ xlsxwriterをインポートできませんでした")
+        debug_info(f"⚠️ xlsxwriterをインポートできませんでした: {str(e)}")
         if is_streamlit_cloud:
             st.warning("⚠️ Streamlit Cloud環境でxlsxwriterをインポートできませんでした。requirements.txtに「xlsxwriter>=3.1.0」が含まれていることを確認してください。")
         else:
-            st.warning("⚠️ xlsxwriterをインポートできませんでした。Excel出力機能が制限される可能性があります。")
+            st.warning(f"⚠️ xlsxwriterをインポートできませんでした: {str(e)}。Excel出力機能が制限される可能性があります。")
+            st.info("pip install xlsxwriterコマンドを実行してxlsxwriterをインストールしてください。")
 
     # 利用可能なExcelエンジンを優先度順にソート
     available_engines = [engine for engine, info in excel_engines.items() if info['available']]
@@ -1083,14 +1090,19 @@ def main():
     # Excelエンジンの状態をまとめて表示
     if available_engines:
         engine_status = [f"{engine}: ✓ (v{excel_engines[engine]['version']})" for engine in available_engines]
-        unavailable = [f"{engine}: ✗" for engine, info in excel_engines.items() if not info['available']]
+        unavailable = [f"{engine}: ✗ ({excel_engines[engine].get('error', 'インポートエラー')})" for engine, info in excel_engines.items() if not info['available']]
         all_status = engine_status + unavailable
-        st.success(f"✅ Excel出力機能が利用可能です。({' | '.join(all_status)})")
+        st.success(f"✅ Excel出力機能が利用可能です。({' | '.join(engine_status)})")
+        if unavailable:
+            st.info(f"⚠️ 一部のExcelエンジンは利用できません: {' | '.join(unavailable)}")
         debug_info(f"利用可能なExcelエンジン: {', '.join(available_engines)}")
     else:
-        st.error("❌ Excel出力機能が利用できません。requirements.txtにopenpyxlとxlsxwriterが含まれていることを確認してください。")
+        error_messages = [f"{engine}: {info.get('error', 'インポートエラー')}" for engine, info in excel_engines.items()]
+        st.error(f"❌ Excel出力機能が利用できません。エラー: {' | '.join(error_messages)}")
         if is_streamlit_cloud:
             st.info("Streamlit Cloud環境では、requirements.txtに以下の行が含まれていることを確認してください：\n```\nopenpyxl>=3.1.2\nxlsxwriter>=3.1.0\n```")
+        else:
+            st.info("以下のコマンドを実行してExcelライブラリをインストールしてください：\n```\npip install openpyxl xlsxwriter\n```")
     
     # セッション状態の初期化
     if 'entries' not in st.session_state:
@@ -1545,6 +1557,12 @@ def main():
                         except Exception as e:
                             st.error(f"❌ {engine}でのExcelファイル作成中にエラーが発生しました: {str(e)}")
                             debug_info(f"{engine}エラー: {str(e)}")
+                            # エラーの詳細情報を表示
+                            if "No module named" in str(e):
+                                if is_streamlit_cloud:
+                                    st.info(f"Streamlit Cloud環境では、requirements.txtに{engine}が含まれていることを確認してください。")
+                                else:
+                                    st.info(f"pip install {engine}コマンドを実行して{engine}をインストールしてください。")
                             # 次のエンジンを試す
                     
                     # 全てのエンジンが失敗した場合はデフォルトエンジンを試す
