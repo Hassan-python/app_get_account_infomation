@@ -1,0 +1,16 @@
+[server]
+enableCORS = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#F63366"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+font = "sans serif"
+
+[runner]
+# Python 3.9を指定
+pythonVersion = "3.9" 
