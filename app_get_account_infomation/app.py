@@ -10,12 +10,34 @@ import pytesseract
 import platform
 import sys
 
-# プラットフォームに応じてTesseractのパスを設定
-if platform.system() == 'Windows':
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-elif platform.system() == 'Linux':
-    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-# macOSではデフォルトのパスを使用
+# Tesseractのパス設定とエラーハンドリング
+try:
+    if platform.system() == 'Windows':
+        # Windowsの場合、一般的なインストールパスを試す
+        possible_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+            r'C:\Users\Hassan\AppData\Local\Tesseract-OCR\tesseract.exe'
+        ]
+        
+        # 存在するパスを探す
+        tesseract_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                tesseract_path = path
+                break
+        
+        if tesseract_path:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            st.success(f"Tesseractが見つかりました: {tesseract_path}")
+        else:
+            st.error("Tesseractが見つかりません。インストールしてください。")
+            st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
+    elif platform.system() == 'Linux':
+        pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+    # macOSではデフォルトのパスを使用
+except Exception as e:
+    st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
 
 import datetime
 import numpy as np
@@ -42,6 +64,88 @@ except ImportError as e:
             st.error("OpenCV関連のパッケージが見つかりません。")
     except Exception as pkg_err:
         st.error(f"パッケージ情報の取得に失敗しました: {pkg_err}")
+        
+    # ダミーのcv2モジュールを作成
+    class DummyCV2:
+        def __init__(self):
+            self.COLOR_BGR2GRAY = 6
+            self.THRESH_BINARY = 0
+            self.THRESH_BINARY_INV = 1
+            self.RETR_EXTERNAL = 0
+            self.CHAIN_APPROX_SIMPLE = 1
+            self.ADAPTIVE_THRESH_GAUSSIAN_C = 1
+            self.__version__ = "dummy"
+            
+        def cvtColor(self, img, code):
+            # グレースケール変換のダミー実装
+            if code == self.COLOR_BGR2GRAY and len(img.shape) == 3:
+                return np.mean(img, axis=2).astype(np.uint8)
+            return img
+            
+        def threshold(self, img, thresh, maxval, type):
+            # 二値化のダミー実装
+            if type == self.THRESH_BINARY:
+                return 1, (img > thresh) * maxval
+            elif type == self.THRESH_BINARY_INV:
+                return 1, (img <= thresh) * maxval
+            return 1, img
+            
+        def findContours(self, img, mode, method):
+            # 輪郭検出のダミー実装
+            return [], None
+            
+        def GaussianBlur(self, img, ksize, sigmaX):
+            # ぼかしのダミー実装
+            return img
+            
+        def resize(self, img, dsize, fx=None, fy=None, interpolation=None):
+            # リサイズのダミー実装
+            if dsize is not None:
+                h, w = dsize
+                return np.zeros((h, w) if len(img.shape) == 2 else (h, w, img.shape[2]), dtype=img.dtype)
+            return img
+            
+        def adaptiveThreshold(self, img, maxValue, adaptiveMethod, thresholdType, blockSize, C):
+            # 適応的二値化のダミー実装
+            return np.ones_like(img) * maxValue
+            
+        def dilate(self, img, kernel, iterations=1):
+            # 膨張処理のダミー実装
+            return img
+            
+        def Canny(self, img, threshold1, threshold2):
+            # エッジ検出のダミー実装
+            return np.zeros_like(img)
+            
+        def boundingRect(self, contour):
+            # 矩形取得のダミー実装
+            return 0, 0, 100, 100
+            
+        def contourArea(self, contour):
+            # 輪郭面積のダミー実装
+            return 0
+            
+        def createCLAHE(self, clipLimit=2.0, tileGridSize=(8, 8)):
+            # CLAHEのダミー実装
+            class DummyCLAHE:
+                def apply(self, img):
+                    return img
+            return DummyCLAHE()
+            
+        def imdecode(self, buf, flags):
+            # 画像デコードのダミー実装
+            try:
+                from PIL import Image
+                import numpy as np
+                img = Image.open(BytesIO(buf))
+                return np.array(img)
+            except:
+                return np.zeros((100, 100, 3), dtype=np.uint8)
+    
+    # ダミーのcv2モジュールをグローバル名前空間に追加
+    cv2 = DummyCV2()
+    CV2_AVAILABLE = False
+    st.warning("OpenCV (cv2) モジュールが見つかりませんでした。一部の画像処理機能が制限されます。")
 
 # HEIC形式のサポートを追加
 try:
