@@ -438,6 +438,15 @@ def extract_credit_history(text):
 def validate_date(date_str):
     """日付の形式を検証し、未来の日付でないかチェックする"""
     try:
+        # 空の文字列の場合
+        if not date_str or date_str.strip() == "":
+            return False, "日付が入力されていません。YYYY-MM-DD形式で入力してください。"
+            
+        # 形式の検証
+        if len(date_str.split("-")) != 3:
+            return False, "日付の形式が正しくありません。YYYY-MM-DD形式で入力してください。"
+            
+        # 日付オブジェクトに変換
         date_obj = datetime.date.fromisoformat(date_str)
         today = datetime.date.today()
         
@@ -445,9 +454,31 @@ def validate_date(date_str):
         if date_obj > today:
             return False, f"未来の日付（{date_str}）が検出されました。正しい日付を入力してください。"
         
+        # 極端に古い日付かチェック（例：10年以上前）
+        ten_years_ago = today.replace(year=today.year - 10)
+        if date_obj < ten_years_ago:
+            return False, f"極端に古い日付（{date_str}）が検出されました。本当にこの日付で正しいですか？"
+        
+        # 年月日の妥当性チェック
+        year, month, day = map(int, date_str.split("-"))
+        
+        # 年の範囲チェック
+        if year < 2000 or year > today.year:
+            return False, f"年（{year}）が有効な範囲外です。2000年から現在までの年を入力してください。"
+        
+        # 月の範囲チェック
+        if month < 1 or month > 12:
+            return False, f"月（{month}）が有効な範囲外です。1〜12の値を入力してください。"
+        
+        # 日の範囲チェック（月ごとの最大日数を考慮）
+        days_in_month = [0, 31, 29 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 28, 
+                         31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if day < 1 or day > days_in_month[month]:
+            return False, f"{month}月の日（{day}）が有効な範囲外です。1〜{days_in_month[month]}の値を入力してください。"
+        
         return True, None
-    except ValueError:
-        return False, "日付の形式が正しくありません。YYYY-MM-DD形式で入力してください。"
+    except ValueError as e:
+        return False, f"日付の形式が正しくありません。YYYY-MM-DD形式で入力してください。エラー: {str(e)}"
 
 def main():
     st.set_page_config(page_title="レシート・クレジット履歴分析", page_icon="📊", layout="wide")
@@ -472,6 +503,10 @@ def main():
         st.session_state.show_detected_receipt = True
     if 'show_detected_receipt_credit' not in st.session_state:
         st.session_state.show_detected_receipt_credit = True
+    
+    # 勘定科目リストの初期化
+    if 'categories' not in st.session_state:
+        st.session_state.categories = CATEGORIES.copy()
     
     # タブの作成
     tab1, tab2, tab3 = st.tabs(["レシート処理", "クレジット履歴処理", "データ確認・ダウンロード"])
@@ -648,6 +683,55 @@ def main():
     with tab3:
         st.header("抽出されたデータ")
         
+        # 勘定科目管理セクションを追加
+        with st.expander("勘定科目の管理", expanded=False):
+            st.subheader("勘定科目の管理")
+            
+            # 現在の勘定科目リストを表示
+            st.write("現在の勘定科目リスト:")
+            
+            # 勘定科目の表示と削除ボタン
+            categories_to_remove = []
+            
+            # 勘定科目を3列で表示
+            cols = st.columns(3)
+            for i, category in enumerate(st.session_state.categories):
+                col_idx = i % 3
+                with cols[col_idx]:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"- {category}")
+                    with col2:
+                        if st.button("削除", key=f"delete_category_{i}"):
+                            categories_to_remove.append(category)
+            
+            # 新規勘定科目の追加
+            st.write("---")
+            new_category = st.text_input("新規勘定科目", key="new_category_input")
+            if st.button("勘定科目を追加", key="add_category_button"):
+                if new_category:
+                    if new_category in st.session_state.categories:
+                        st.warning(f"勘定科目「{new_category}」は既に存在します。")
+                    else:
+                        st.session_state.categories.append(new_category)
+                        st.success(f"勘定科目「{new_category}」を追加しました。")
+                        st.rerun()
+                else:
+                    st.warning("勘定科目名を入力してください。")
+            
+            # 勘定科目の削除処理
+            for category in categories_to_remove:
+                if category in st.session_state.categories:
+                    # この勘定科目を使用しているエントリがあるか確認
+                    entries_using_category = [i for i, entry in enumerate(st.session_state.entries) if entry.get("category") == category]
+                    
+                    if entries_using_category:
+                        st.warning(f"勘定科目「{category}」は{len(entries_using_category)}件のエントリで使用されています。削除できません。")
+                    else:
+                        st.session_state.categories.remove(category)
+                        st.success(f"勘定科目「{category}」を削除しました。")
+                        st.rerun()
+        
         if not st.session_state.entries:
             st.info("まだデータが抽出されていません。レシートまたはクレジット履歴画像をアップロードして処理してください。")
         else:
@@ -725,9 +809,22 @@ def main():
                             if is_valid:
                                 st.session_state.entries[i]["date"] = corrected_date
                             else:
-                                st.error(error_msg)
+                                # エラーメッセージをより目立つように表示
+                                st.error(f"⚠️ 日付エラー: {error_msg}")
+                                # 日付の背景色を変更するためのHTMLを使用
+                                st.markdown(f"""
+                                <div style="background-color: #ffcccc; padding: 10px; border-radius: 5px; margin-top: 5px;">
+                                    <strong>無効な日付:</strong> {corrected_date}
+                                </div>
+                                """, unsafe_allow_html=True)
                         else:
-                            # 日付が無効な場合は編集フィールドを表示
+                            # 日付が無効な場合は編集フィールドを表示（より目立つように）
+                            st.markdown(f"""
+                            <div style="background-color: #fff3cd; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                                <strong>⚠️ 日付エラー:</strong> {date_error_msg}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
                             corrected_date = st.text_input(
                                 "**正しい日付を入力**（YYYY-MM-DD形式）:",
                                 value=datetime.date.today().strftime("%Y-%m-%d"),
@@ -737,16 +834,25 @@ def main():
                             is_valid, error_msg = validate_date(corrected_date)
                             if is_valid:
                                 st.session_state.entries[i]["date"] = corrected_date
-                                st.success("日付を更新しました")
+                                st.success("✅ 日付を更新しました")
                             else:
-                                st.error(error_msg)
+                                # エラーメッセージをより目立つように表示
+                                st.error(f"⚠️ 日付エラー: {error_msg}")
+                                # 日付の背景色を変更するためのHTMLを使用
+                                st.markdown(f"""
+                                <div style="background-color: #ffcccc; padding: 10px; border-radius: 5px; margin-top: 5px;">
+                                    <strong>無効な日付:</strong> {corrected_date}
+                                </div>
+                                """, unsafe_allow_html=True)
                     
                     with edit_col3:
                         # 勘定科目のプルダウン
                         selected_category = st.selectbox(
                             "勘定科目",
-                            options=CATEGORIES,
-                            index=0 if entry["category"] is None else CATEGORIES.index(entry["category"]),
+                            options=st.session_state.categories,
+                            index=0 if entry["category"] is None else 
+                                  (st.session_state.categories.index(entry["category"]) 
+                                   if entry["category"] in st.session_state.categories else 0),
                             key=f"category_{i}"
                         )
                         st.session_state.entries[i]["category"] = selected_category
