@@ -15,8 +15,15 @@ if platform.system() == 'Windows':
 # Streamlit Cloudではパスを設定しない（デフォルトのパスを使用）
 
 import datetime
-import cv2
 import numpy as np
+
+# cv2を条件付きでインポート
+CV2_AVAILABLE = False
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    st.warning("OpenCV (cv2) モジュールが見つかりません。一部の画像処理機能が制限されます。")
 
 # HEIC形式のサポートを追加
 try:
@@ -63,6 +70,11 @@ DEFAULT_PARAMS = {
 
 def detect_receipt_area(img, params=None):
     """画像からレシート領域を検出する"""
+    # cv2が利用できない場合は元の画像をそのまま返す
+    if not CV2_AVAILABLE:
+        st.warning("OpenCVが利用できないため、レシート領域検出をスキップします。")
+        return img
+        
     try:
         # 画像が空でないか確認
         if img is None or img.size == 0:
@@ -145,6 +157,10 @@ def detect_receipt_area(img, params=None):
 
 def apply_contrast_enhancement(img):
     """コントラスト強調を適用する"""
+    # cv2が利用できない場合は元の画像をそのまま返す
+    if not CV2_AVAILABLE:
+        return img
+        
     # CLAHE（コントラスト制限適応ヒストグラム平坦化）を適用
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(img)
@@ -190,15 +206,35 @@ def preprocess_image(image_bytes, params=None, is_credit=False):
                 pil_img = Image.open(BytesIO(image_bytes))
                 st.info(f"変換後の画像形式: {pil_img.format}, モード: {pil_img.mode}")
                 
+                # cv2が利用できない場合はPIL画像をそのまま返す
+                if not CV2_AVAILABLE:
+                    # グレースケールに変換
+                    if pil_img.mode != 'L':
+                        pil_img = pil_img.convert('L')
+                    return pil_img
+                
                 # OpenCVで処理するために変換
                 img = np.array(pil_img)
                 img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             else:
+                # cv2が利用できない場合はPIL画像をそのまま返す
+                if not CV2_AVAILABLE:
+                    # グレースケールに変換
+                    if pil_img.mode != 'L':
+                        pil_img = pil_img.convert('L')
+                    return pil_img
+                
                 # 通常のフォーマットはOpenCVで直接読み込む
                 nparr = np.frombuffer(image_bytes, np.uint8)
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         except Exception as e:
             st.warning(f"PILでの画像読み込みに失敗しました: {e}")
+            
+            # cv2が利用できない場合はダミー画像を返す
+            if not CV2_AVAILABLE:
+                st.error("画像の読み込みに失敗し、OpenCVも利用できません。")
+                return Image.new('L', (100, 100), color=128)
+                
             # PILで開けない場合はOpenCVで試す
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -209,6 +245,13 @@ def preprocess_image(image_bytes, params=None, is_credit=False):
             # ダミー画像を返す
             return Image.new('RGB', (100, 100), color = (255, 255, 255))
         
+        # cv2が利用できない場合はここでPIL画像に変換して返す
+        if not CV2_AVAILABLE:
+            pil_img = Image.fromarray(img)
+            if pil_img.mode != 'L':
+                pil_img = pil_img.convert('L')
+            return pil_img
+            
         # レシート領域の検出
         if params.get('detect_receipt', True):
             img = detect_receipt_area(img, params)
@@ -282,7 +325,7 @@ def process_image_with_ocr(image_bytes, params=None, is_credit=False):
                 text = pytesseract.image_to_string(processed_image, config=alt_config)
                 
                 # それでも空の場合は別の前処理を試す
-                if not text.strip():
+                if not text.strip() and CV2_AVAILABLE:
                     st.warning("2回目のOCR処理でもテキストが検出されませんでした。画像の二値化を試みます。")
                     # 画像を二値化して再試行
                     img_array = np.array(processed_image)
@@ -296,6 +339,23 @@ def process_image_with_ocr(image_bytes, params=None, is_credit=False):
                     
                     # 二値化した画像でOCR実行
                     text = pytesseract.image_to_string(binary_pil, config=custom_config)
+                elif not text.strip() and not CV2_AVAILABLE:
+                    st.warning("2回目のOCR処理でもテキストが検出されませんでした。OpenCVが利用できないため、PILを使用して画像処理を試みます。")
+                    # PILを使用して画像を処理
+                    from PIL import ImageOps, ImageFilter
+                    
+                    # コントラスト強調
+                    enhanced_img = ImageOps.autocontrast(processed_image, cutoff=5)
+                    # シャープ化
+                    sharpened_img = enhanced_img.filter(ImageFilter.SHARPEN)
+                    
+                    # 処理した画像を表示
+                    buffered = BytesIO()
+                    sharpened_img.save(buffered, format="PNG")
+                    st.image(buffered.getvalue(), caption="PIL処理後の画像", width=300)
+                    
+                    # 処理した画像でOCR実行
+                    text = pytesseract.image_to_string(sharpened_img, config=custom_config)
             
             return text
         except Exception as e:
