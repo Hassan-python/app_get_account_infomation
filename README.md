@@ -2,6 +2,8 @@
 
 このアプリケーションは、レシートやクレジットカードの履歴を分析し、支出を可視化するためのツールです。
 
+https://appgetaccountinfomation-s8uvvk76lieq8hdugg3ehn.streamlit.app/
+
 ## 機能
 
 - レシート画像からのテキスト抽出（OCR）
