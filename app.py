@@ -24,6 +24,78 @@ try:
     CV2_AVAILABLE = True
 except ImportError:
     st.warning("OpenCV (cv2) モジュールが見つかりません。一部の画像処理機能が制限されます。")
+    # ダミーのcv2モジュールを作成して最低限の互換性を確保
+    class DummyCV2:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    
+    class DummyCLAHE:
+        def apply(self, img):
+            return img
+    
+    class DummyCV2WithFunctions(DummyCV2):
+        COLOR_BGR2GRAY = 0
+        COLOR_RGB2BGR = 0
+        IMREAD_COLOR = 0
+        RETR_EXTERNAL = 0
+        CHAIN_APPROX_SIMPLE = 0
+        THRESH_BINARY = 0
+        THRESH_OTSU = 0
+        ADAPTIVE_THRESH_GAUSSIAN_C = 0
+        THRESH_BINARY_INV = 0
+        
+        def cvtColor(self, *args, **kwargs):
+            # 入力画像をそのまま返す
+            if len(args) > 0:
+                return args[0]
+            return None
+            
+        def GaussianBlur(self, img, *args, **kwargs):
+            return img
+            
+        def Canny(self, *args, **kwargs):
+            if len(args) > 0:
+                # 同じサイズの空の配列を返す
+                return np.zeros_like(args[0])
+            return np.zeros((100, 100), dtype=np.uint8)
+            
+        def dilate(self, *args, **kwargs):
+            if len(args) > 0:
+                return args[0]
+            return np.zeros((100, 100), dtype=np.uint8)
+            
+        def findContours(self, *args, **kwargs):
+            return [], None
+            
+        def boundingRect(self, *args, **kwargs):
+            return 0, 0, 100, 100
+            
+        def createCLAHE(self, *args, **kwargs):
+            return DummyCLAHE()
+            
+        def imdecode(self, *args, **kwargs):
+            # numpyの配列からPIL画像を作成
+            if len(args) > 0:
+                try:
+                    from PIL import Image
+                    import io
+                    return np.array(Image.open(io.BytesIO(args[0])))
+                except:
+                    pass
+            return np.zeros((100, 100, 3), dtype=np.uint8)
+            
+        def threshold(self, *args, **kwargs):
+            if len(args) > 0:
+                return 0, args[0]
+            return 0, np.zeros((100, 100), dtype=np.uint8)
+            
+        def adaptiveThreshold(self, *args, **kwargs):
+            if len(args) > 0:
+                return args[0]
+            return np.zeros((100, 100), dtype=np.uint8)
+    
+    # ダミーのcv2モジュールを設定
+    cv2 = DummyCV2WithFunctions()
 
 # HEIC形式のサポートを追加
 try:
