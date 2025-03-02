@@ -7,10 +7,41 @@ import os
 from io import BytesIO
 from PIL import Image
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+import platform
+import sys
+
+# プラットフォームに応じてTesseractのパスを設定
+if platform.system() == 'Windows':
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+elif platform.system() == 'Linux':
+    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+# macOSではデフォルトのパスを使用
+
 import datetime
-import cv2
 import numpy as np
+
+# cv2のインポートを試みる - Python 3.12対応の堅牢なエラーハンドリング
+try:
+    import cv2
+    st.success(f"OpenCV (cv2) モジュールが正常にインポートされました。バージョン: {cv2.__version__}")
+    CV2_AVAILABLE = True
+except ImportError as e:
+    st.error(f"OpenCV (cv2) モジュールのインポートに失敗しました: {e}")
+    # 詳細なエラー情報を表示
+    st.error(f"Python バージョン: {sys.version}")
+    st.error("インストールされているパッケージを確認します...")
+    
+    # インストールされているパッケージの情報を表示
+    try:
+        import pkg_resources
+        installed_packages = [f"{pkg.key}=={pkg.version}" for pkg in pkg_resources.working_set]
+        opencv_packages = [pkg for pkg in installed_packages if "opencv" in pkg.lower()]
+        if opencv_packages:
+            st.error(f"インストールされているOpenCVパッケージ: {', '.join(opencv_packages)}")
+        else:
+            st.error("OpenCV関連のパッケージが見つかりません。")
+    except Exception as pkg_err:
+        st.error(f"パッケージ情報の取得に失敗しました: {pkg_err}")
 
 # HEIC形式のサポートを追加
 try:
@@ -193,6 +224,7 @@ def preprocess_image(image_bytes, params=None, is_credit=False):
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         except Exception as e:
             st.warning(f"PILでの画像読み込みに失敗しました: {e}")
+            
             # PILで開けない場合はOpenCVで試す
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
