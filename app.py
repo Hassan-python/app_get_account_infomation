@@ -9,69 +9,237 @@ import json
 import os
 from io import BytesIO
 from PIL import Image
-import pytesseract
 import platform
 import sys
 import subprocess
+import shutil
 
-# Tesseractのパス設定とエラーハンドリング
+# EasyOCRのインポートを試みる
 try:
-    if platform.system() == 'Windows':
-        # Windowsの場合、一般的なインストールパスを試す
-        possible_paths = [
-            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-            r'C:\Users\Hassan\AppData\Local\Tesseract-OCR\tesseract.exe'
-        ]
-        
-        # 存在するパスを探す
-        tesseract_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                tesseract_path = path
-                break
-        
-        if tesseract_path:
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            st.success(f"Tesseractが見つかりました: {tesseract_path}")
-            
-            # Tesseractのバージョンを確認（Windows）
-            try:
-                version_output = subprocess.check_output([tesseract_path, '--version'], stderr=subprocess.STDOUT, text=True)
-                st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
-            except Exception as ver_err:
-                st.warning(f"Tesseractバージョンの確認に失敗しました: {ver_err}")
-        else:
-            st.error("Tesseractが見つかりません。インストールしてください。")
-            st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
-    elif platform.system() == 'Linux':
-        # Linuxの場合（Streamlit Cloudを含む）
+    import easyocr
+    EASYOCR_AVAILABLE = True
+    st.success("EasyOCRが正常にインポートされました。")
+    
+    # EasyOCRのリーダーを初期化（日本語と英語をサポート）
+    @st.cache_resource
+    def get_ocr_reader():
         try:
-            # まずパスを設定
-            pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-            
-            # Tesseractのバージョンを確認（Linux）
-            try:
-                version_output = subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
-                st.success(f"Tesseractが見つかりました: /usr/bin/tesseract")
-                st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
-                
-                # インストールされている言語パックを確認
-                try:
-                    lang_output = subprocess.check_output(['tesseract', '--list-langs'], stderr=subprocess.STDOUT, text=True)
-                    st.info(f"インストールされている言語パック: {lang_output}")
-                except Exception as lang_err:
-                    st.warning(f"言語パックの確認に失敗しました: {lang_err}")
-            except Exception as ver_err:
-                st.warning(f"Tesseract情報の確認に失敗しました: {ver_err}")
-                st.info("Streamlit Cloud環境では、packages.txtファイルにtesseract-ocrとtesseract-ocr-jpnが含まれていることを確認してください。")
+            reader = easyocr.Reader(['ja', 'en'])
+            st.success("EasyOCRリーダーが初期化されました。")
+            return reader
         except Exception as e:
-            st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
-            st.info("OCR機能が制限されます。テキスト抽出が正確に行われない可能性があります。")
-    # macOSではデフォルトのパスを使用
-except Exception as e:
-    st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
-    st.warning("OCR機能が制限されます。テキスト抽出が正確に行われない可能性があります。")
+            st.error(f"EasyOCRリーダーの初期化に失敗しました: {e}")
+            return None
+    
+    # リーダーを取得
+    ocr_reader = get_ocr_reader()
+    
+except ImportError:
+    EASYOCR_AVAILABLE = False
+    st.warning("EasyOCRがインストールされていません。代わりにTesseractを使用します。")
+    ocr_reader = None
+    
+    # Tesseractのインポートを試みる
+    try:
+        import pytesseract
+        TESSERACT_AVAILABLE = True
+    except ImportError:
+        TESSERACT_AVAILABLE = False
+        st.error("pytesseractがインストールされていません。OCR機能は制限されます。")
+
+# Tesseractのパス設定とエラーハンドリング（EasyOCRが利用できない場合のフォールバック）
+if not EASYOCR_AVAILABLE:
+    try:
+        if platform.system() == 'Windows':
+            # Windowsの場合、一般的なインストールパスを試す
+            possible_paths = [
+                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                r'C:\Users\Hassan\AppData\Local\Tesseract-OCR\tesseract.exe'
+            ]
+            
+            # 存在するパスを探す
+            tesseract_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    tesseract_path = path
+                    break
+            
+            if tesseract_path:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                st.success(f"Tesseractが見つかりました: {tesseract_path}")
+                
+                # Tesseractのバージョンを確認（Windows）
+                try:
+                    version_output = subprocess.check_output([tesseract_path, '--version'], stderr=subprocess.STDOUT, text=True)
+                    st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+                except Exception as ver_err:
+                    st.warning(f"Tesseractバージョンの確認に失敗しました: {ver_err}")
+            else:
+                st.warning("Tesseractが見つかりません。OCR機能は制限されます。")
+                st.info("Tesseractのインストール方法: https://github.com/UB-Mannheim/tesseract/wiki")
+                
+                # ダミーのOCR機能を提供するためのフォールバック
+                class DummyTesseract:
+                    @staticmethod
+                    def image_to_string(image, **kwargs):
+                        return "OCR機能が利用できません。Tesseractがインストールされていないか、正しく設定されていません。"
+                
+                # グローバル名前空間に追加
+                pytesseract.image_to_string = DummyTesseract.image_to_string
+        elif platform.system() == 'Linux':
+            # Linuxの場合（Streamlit Cloudを含む）
+            # 複数の可能性のあるパスを試す
+            possible_linux_paths = [
+                '/usr/bin/tesseract',
+                '/usr/local/bin/tesseract',
+                '/app/.apt/usr/bin/tesseract',  # Streamlit Cloudの一般的なパス
+                '/app/.apt/usr/share/tesseract-ocr/tesseract',
+                '/usr/share/tesseract-ocr/tesseract',
+                '/app/packages/tesseract-ocr/tesseract',  # 追加のStreamlit Cloudパス
+                '/app/.apt/opt/tesseract/bin/tesseract'   # 別の可能性のあるパス
+            ]
+            
+            # パスが存在するか確認
+            tesseract_path = None
+            for path in possible_linux_paths:
+                if os.path.exists(path):
+                    tesseract_path = path
+                    st.info(f"Tesseractパスが見つかりました: {path}")
+                    break
+                    
+            # shutil.whichを使用してパスを探す
+            if not tesseract_path:
+                try:
+                    tesseract_path = shutil.which('tesseract')
+                    if tesseract_path:
+                        st.info(f"shutil.whichでTesseractが見つかりました: {tesseract_path}")
+                except Exception as e:
+                    st.warning(f"shutil.whichでの検索中にエラーが発生: {e}")
+                    
+                # それでも見つからない場合はsubprocessでwhichコマンドを実行
+                if not tesseract_path:
+                    try:
+                        which_output = subprocess.check_output(['which', 'tesseract'], stderr=subprocess.STDOUT, text=True).strip()
+                        if which_output and os.path.exists(which_output):
+                            tesseract_path = which_output
+                            st.info(f"whichコマンドでTesseractが見つかりました: {tesseract_path}")
+                    except Exception as e:
+                        st.warning(f"whichコマンドでの検索中にエラーが発生: {e}")
+                        
+                # Streamlit Cloud環境の特別な処理
+                if not tesseract_path and os.path.exists('/app'):
+                    st.info("Streamlit Cloud環境を検出しました。")
+                    
+                    # Streamlit Cloudでは、packages.txtで指定されたパッケージは/app/.apt/usr/binにインストールされる
+                    default_cloud_path = '/app/.apt/usr/bin/tesseract'
+                    
+                    # パスが存在するか確認
+                    if os.path.exists(default_cloud_path):
+                        tesseract_path = default_cloud_path
+                        st.success(f"Streamlit Cloud環境でTesseractが見つかりました: {tesseract_path}")
+                    else:
+                        st.warning(f"デフォルトパス {default_cloud_path} が存在しません。")
+                        
+                        # 代替パスを試す
+                        alt_cloud_paths = [
+                            '/app/.apt/usr/share/tesseract-ocr/tesseract',
+                            '/app/packages/tesseract-ocr/tesseract'
+                        ]
+                        
+                        for alt_path in alt_cloud_paths:
+                            if os.path.exists(alt_path):
+                                tesseract_path = alt_path
+                                st.success(f"代替パスでTesseractが見つかりました: {tesseract_path}")
+                                break
+                        
+                        # それでも見つからない場合はfindコマンドを使用
+                        if not tesseract_path:
+                            try:
+                                # findコマンドでtesseractバイナリを探す
+                                find_cmd = ['find', '/app', '-name', 'tesseract', '-type', 'f', '2>/dev/null']
+                                find_output = subprocess.check_output(find_cmd, stderr=subprocess.PIPE, text=True).strip()
+                                
+                                if find_output:
+                                    tesseract_paths = find_output.split('\n')
+                                    st.info(f"findコマンドで見つかったTesseractパス: {tesseract_paths}")
+                                    
+                                    # 最初の結果を使用
+                                    if tesseract_paths:
+                                        tesseract_path = tesseract_paths[0]
+                                        st.success(f"findコマンドでTesseractが見つかりました: {tesseract_path}")
+                            except Exception as e:
+                                st.warning(f"findコマンドでの検索中にエラーが発生: {e}")
+                                
+                            # 最後の手段として、Tesseractをダミー実装で代替
+                            if not tesseract_path:
+                                st.error("Tesseractが見つかりません。OCR機能はダミー実装で代替します。")
+                                st.info("Streamlit Cloud環境では、packages.txtファイルに以下が含まれていることを確認してください：\ntesseract-ocr\nlibtesseract-dev\ntesseract-ocr-jpn\ntesseract-ocr-eng")
+                                
+                                # ダミーのOCR機能を提供
+                                class DummyTesseract:
+                                    @staticmethod
+                                    def image_to_string(image, **kwargs):
+                                        return "OCR機能が利用できません。Tesseractがインストールされていないか、正しく設定されていません。"
+                                
+                                # グローバル名前空間に追加
+                                pytesseract.image_to_string = DummyTesseract.image_to_string
+            
+            # Tesseractパスが見つかった場合の処理
+            if tesseract_path:
+                # パスが実際に存在するか最終確認
+                if os.path.exists(tesseract_path):
+                    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                    st.success(f"Tesseractパスを設定しました: {tesseract_path}")
+                    
+                    # Tesseractのバージョンを確認
+                    try:
+                        version_output = subprocess.check_output([tesseract_path, '--version'], stderr=subprocess.STDOUT, text=True)
+                        st.info(f"Tesseractバージョン情報: {version_output.splitlines()[0]}")
+                        
+                        # インストールされている言語パックを確認
+                        try:
+                            lang_output = subprocess.check_output([tesseract_path, '--list-langs'], stderr=subprocess.STDOUT, text=True)
+                            st.info(f"インストールされている言語パック: {lang_output}")
+                        except Exception as lang_err:
+                            st.warning(f"言語パックの確認に失敗しました: {lang_err}")
+                    except Exception as ver_err:
+                        st.warning(f"Tesseract情報の確認に失敗しました: {ver_err}")
+                else:
+                    st.error(f"設定されたTesseractパス {tesseract_path} が実際には存在しません。")
+                    
+                    # ダミーのOCR機能を提供
+                    class DummyTesseract:
+                        @staticmethod
+                        def image_to_string(image, **kwargs):
+                            return "OCR機能が利用できません。Tesseractパスが無効です。"
+                    
+                    # グローバル名前空間に追加
+                    pytesseract.image_to_string = DummyTesseract.image_to_string
+            else:
+                st.error("Tesseractが見つかりません。OCR機能は制限されます。")
+                
+                # ダミーのOCR機能を提供
+                class DummyTesseract:
+                    @staticmethod
+                    def image_to_string(image, **kwargs):
+                        return "OCR機能が利用できません。Tesseractがインストールされていないか、正しく設定されていません。"
+                
+                # グローバル名前空間に追加
+                pytesseract.image_to_string = DummyTesseract.image_to_string
+    except Exception as e:
+        st.error(f"Tesseractの設定中にエラーが発生しました: {e}")
+        st.warning("OCR機能が制限されます。テキスト抽出が正確に行われない可能性があります。")
+        
+        # エラーが発生した場合もダミーのOCR機能を提供
+        class DummyTesseract:
+            @staticmethod
+            def image_to_string(image, **kwargs):
+                return "OCR機能が利用できません。Tesseractがインストールされていないか、正しく設定されていません。"
+        
+        # グローバル名前空間に追加
+        if TESSERACT_AVAILABLE:
+            pytesseract.image_to_string = DummyTesseract.image_to_string
 
 import datetime
 import numpy as np
@@ -198,7 +366,8 @@ load_dotenv()
 # DeepSeek APIキーの取得
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 if not DEEPSEEK_API_KEY:
-    st.error("DeepSeek APIキーが設定されていません。.envファイルにDEEPSEEK_API_KEYを設定してください。")
+    st.warning("DeepSeek APIキーが設定されていません。OCR結果からの情報抽出機能は制限されます。")
+    st.info("情報抽出機能を使用するには、.envファイルにDEEPSEEK_API_KEYを設定してください。")
 
 # 勘定科目のリスト
 CATEGORIES = [
@@ -429,69 +598,88 @@ def process_image_with_ocr(image_bytes, params=None, is_credit=False):
             processed_image.save(buffered, format="PNG")
             st.image(buffered.getvalue(), caption="前処理後の画像", width=300)
         
-        # OCR処理
-        # Tesseractのパラメータを設定して精度を向上
-        # PSM値を調整（6: 単一のテキストブロックとして処理、3: 自動ページセグメンテーション）
-        custom_config = r'--oem 3 --psm 3 -l jpn+eng'
-        
-        # OCR処理を実行
-        try:
-            # Tesseractが利用可能かチェック
+        # EasyOCRが利用可能な場合はEasyOCRを使用
+        if EASYOCR_AVAILABLE and ocr_reader:
             try:
-                if platform.system() == 'Windows':
-                    if not pytesseract.pytesseract.tesseract_cmd or not os.path.exists(pytesseract.pytesseract.tesseract_cmd):
-                        st.error("Tesseractが見つかりません。OCR処理をスキップします。")
-                        st.info("Windowsの場合は、Tesseractをインストールしてください: https://github.com/UB-Mannheim/tesseract/wiki")
-                        return "OCR処理ができませんでした。Tesseractがインストールされていません。"
+                # PIL画像をnumpy配列に変換
+                img_array = np.array(processed_image)
+                
+                # EasyOCRでテキスト認識
+                with st.spinner("EasyOCRでテキスト認識中..."):
+                    results = ocr_reader.readtext(img_array)
+                
+                # 結果を連結してテキストを生成
+                if results:
+                    text = "\n".join([result[1] for result in results])
+                    return text
                 else:
-                    # Linuxの場合、コマンドが実行可能かチェック
-                    try:
-                        subprocess.check_output(['tesseract', '--version'], stderr=subprocess.STDOUT, text=True)
-                    except:
-                        st.error("Tesseractコマンドが実行できません。OCR処理をスキップします。")
-                        st.info("Streamlit Cloud環境では、packages.txtファイルにtesseract-ocrとtesseract-ocr-jpnが含まれていることを確認してください。")
-                        return "OCR処理ができませんでした。Tesseractが利用できません。"
-            except Exception as check_err:
-                st.warning(f"Tesseract利用可能性チェック中にエラーが発生しました: {check_err}")
-                
-            # OCR実行
-            text = pytesseract.image_to_string(processed_image, config=custom_config)
+                    st.warning("EasyOCRでテキストが検出されませんでした。")
+                    return "テキストが検出されませんでした。手動でデータを入力してください。"
+            except Exception as e:
+                st.error(f"EasyOCR処理中にエラーが発生しました: {e}")
+                st.warning("TesseractにフォールバックしてOCR処理を試みます。")
+                # EasyOCRが失敗した場合はTesseractにフォールバック
+        
+        # Tesseractを使用（EasyOCRが利用できない場合や失敗した場合）
+        if TESSERACT_AVAILABLE:
+            # OCR処理
+            # Tesseractのパラメータを設定して精度を向上
+            # PSM値を調整（6: 単一のテキストブロックとして処理、3: 自動ページセグメンテーション）
+            custom_config = r'--oem 3 --psm 3 -l jpn+eng'
             
-            # テキストが空の場合は別のPSM値で再試行
-            if not text.strip():
-                st.warning("最初のOCR処理でテキストが検出されませんでした。別の設定で再試行します。")
-                # PSM値を変更して再試行
-                alt_config = r'--oem 3 --psm 6 -l jpn+eng'
-                text = pytesseract.image_to_string(processed_image, config=alt_config)
+            # OCR処理を実行
+            try:
+                # OCR実行
+                text = pytesseract.image_to_string(processed_image, config=custom_config)
                 
-                # それでも空の場合は別の前処理を試す
-                if not text.strip():
-                    st.warning("2回目のOCR処理でもテキストが検出されませんでした。画像の二値化を試みます。")
-                    # 画像を二値化して再試行
-                    img_array = np.array(processed_image)
-                    _, binary_img = cv2.threshold(img_array, 150, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-                    binary_pil = Image.fromarray(binary_img)
+                # テキストが空の場合は別のPSM値で再試行
+                if not text.strip() or text.strip() == "OCR機能が利用できません。Tesseractがインストールされていないか、正しく設定されていません。":
+                    if text.strip() == "OCR機能が利用できません。Tesseractがインストールされていないか、正しく設定されていません。":
+                        st.warning("Tesseractが利用できないため、OCR処理をスキップします。")
+                        return "OCR機能が利用できません。手動でデータを入力してください。"
                     
-                    # 二値化した画像を表示
-                    buffered = BytesIO()
-                    binary_pil.save(buffered, format="PNG")
-                    st.image(buffered.getvalue(), caption="二値化後の画像", width=300)
+                    st.warning("最初のOCR処理でテキストが検出されませんでした。別の設定で再試行します。")
+                    # PSM値を変更して再試行
+                    alt_config = r'--oem 3 --psm 6 -l jpn+eng'
+                    text = pytesseract.image_to_string(processed_image, config=alt_config)
                     
-                    # 二値化した画像でOCR実行
-                    text = pytesseract.image_to_string(binary_pil, config=custom_config)
-            
-            return text
-        except Exception as e:
-            st.error(f"Tesseract OCR処理中にエラーが発生しました: {e}")
-            return None
+                    # それでも空の場合は別の前処理を試す
+                    if not text.strip():
+                        st.warning("2回目のOCR処理でもテキストが検出されませんでした。画像の二値化を試みます。")
+                        # 画像を二値化して再試行
+                        img_array = np.array(processed_image)
+                        _, binary_img = cv2.threshold(img_array, 150, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+                        binary_pil = Image.fromarray(binary_img)
+                        
+                        # 二値化した画像を表示
+                        buffered = BytesIO()
+                        binary_pil.save(buffered, format="PNG")
+                        st.image(buffered.getvalue(), caption="二値化後の画像", width=300)
+                        
+                        # 二値化した画像でOCR実行
+                        text = pytesseract.image_to_string(binary_pil, config=custom_config)
+                
+                return text
+            except Exception as e:
+                st.error(f"Tesseract OCR処理中にエラーが発生しました: {e}")
+                return "OCR処理中にエラーが発生しました。手動でデータを入力してください。"
+        else:
+            st.error("OCR機能が利用できません。EasyOCRもTesseractも利用できません。")
+            return "OCR機能が利用できません。手動でデータを入力してください。"
     except Exception as e:
         st.error(f"OCR処理中にエラーが発生しました: {e}")
-        return None
+        return "OCR処理中にエラーが発生しました。手動でデータを入力してください。"
 
 def extract_receipt_info(text):
     """DeepSeek APIを使用してレシートから情報を抽出する"""
     if not DEEPSEEK_API_KEY:
-        return None
+        st.warning("DeepSeek APIキーが設定されていないため、情報抽出機能は利用できません。")
+        # APIキーがない場合は空のデータを返す
+        return {
+            "store_name": "",
+            "date": "",
+            "total_amount": ""
+        }
     
     prompt = f"""
     以下のレシートのテキストから、店名、日付、合計金額を正確に抽出してJSON形式で出力してください。
@@ -556,7 +744,13 @@ def extract_receipt_info(text):
 def extract_credit_history(text):
     """DeepSeek APIを使用してクレジット履歴から情報を抽出する"""
     if not DEEPSEEK_API_KEY:
-        return []
+        st.warning("DeepSeek APIキーが設定されていないため、情報抽出機能は利用できません。")
+        # APIキーがない場合は空のリストを返す
+        return [{
+            "store_name": "",
+            "date": "",
+            "total_amount": ""
+        }]
     
     prompt = f"""
     以下のクレジットカード履歴のテキストから、各取引の店名、日付、金額を正確に抽出してJSON形式で出力してください。
@@ -696,8 +890,40 @@ def main():
     if 'categories' not in st.session_state:
         st.session_state.categories = CATEGORIES.copy()
     
+    # 初期化メッセージを保存するためのリスト
+    initialization_messages = []
+    
+    # 初期化メッセージを収集する関数
+    def collect_message(message, type="info"):
+        if type == "success":
+            initialization_messages.append(("success", message))
+        elif type == "warning":
+            initialization_messages.append(("warning", message))
+        elif type == "error":
+            initialization_messages.append(("error", message))
+        else:
+            initialization_messages.append(("info", message))
+    
+    # 元のst.success、st.warning、st.errorなどの関数を一時的に保存
+    original_success = st.success
+    original_warning = st.warning
+    original_error = st.error
+    original_info = st.info
+    
+    # 一時的に関数をオーバーライド
+    st.success = lambda msg: collect_message(msg, "success")
+    st.warning = lambda msg: collect_message(msg, "warning")
+    st.error = lambda msg: collect_message(msg, "error")
+    st.info = lambda msg: collect_message(msg, "info")
+    
     # タブの作成
     tab1, tab2, tab3 = st.tabs(["レシート処理", "クレジット履歴処理", "データ確認・ダウンロード"])
+    
+    # 関数を元に戻す
+    st.success = original_success
+    st.warning = original_warning
+    st.error = original_error
+    st.info = original_info
     
     with tab1:
         st.header("レシート画像のアップロード")
@@ -782,6 +1008,19 @@ def main():
                             st.success(f"{file.name}からデータを抽出しました。")
                         else:
                             st.error(f"{file.name}からデータを抽出できませんでした。")
+        
+        # 初期化メッセージを表示するセクション
+        with st.expander("システム情報", expanded=False):
+            st.subheader("システム初期化情報")
+            for msg_type, msg in initialization_messages:
+                if msg_type == "success":
+                    st.success(msg)
+                elif msg_type == "warning":
+                    st.warning(msg)
+                elif msg_type == "error":
+                    st.error(msg)
+                else:
+                    st.info(msg)
     
     with tab2:
         st.header("クレジット履歴画像のアップロード")
@@ -867,6 +1106,19 @@ def main():
                             st.success(f"{file.name}から{len(entries)}件のデータを抽出しました。")
                         else:
                             st.error(f"{file.name}からデータを抽出できませんでした。")
+        
+        # 初期化メッセージを表示するセクション
+        with st.expander("システム情報", expanded=False):
+            st.subheader("システム初期化情報")
+            for msg_type, msg in initialization_messages:
+                if msg_type == "success":
+                    st.success(msg)
+                elif msg_type == "warning":
+                    st.warning(msg)
+                elif msg_type == "error":
+                    st.error(msg)
+                else:
+                    st.info(msg)
     
     with tab3:
         st.header("抽出されたデータ")
